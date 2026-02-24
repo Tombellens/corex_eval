@@ -13,7 +13,7 @@ political career data pipelines across three tasks: **collection**,
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/<your-org>/corex_eval.git
+git clone https://github.com/Tombellens/corex_eval.git
 cd corex_eval
 pip install -e ".[dev]"
 ```

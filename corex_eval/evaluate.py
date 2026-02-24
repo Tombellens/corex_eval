@@ -327,6 +327,8 @@ def _evaluate_composite(
             end_year   = _to_int(row.get("career_end_year")),
             position   = str(row.get("career_position", "")) or None,
         )
+        if spell.start_year is None and spell.end_year is None:
+            continue  # skip spells with no temporal info — unevaluable
         gold_dict.setdefault(case_id, []).append(spell)
 
     # Build predictions spell dict
@@ -349,12 +351,15 @@ def _evaluate_composite(
         for entry in raw:
             if not isinstance(entry, dict):
                 continue
-            spells.append(CareerSpell(
-                case_id    = case_id,
-                start_year = _to_int(entry.get("start_year")),
-                end_year   = _to_int(entry.get("end_year")),
-                position   = entry.get("position"),
-            ))
+            spell = CareerSpell(
+                case_id=case_id,
+                start_year=_to_int(entry.get("start_year")),
+                end_year=_to_int(entry.get("end_year")),
+                position=entry.get("position"),
+            )
+            if spell.start_year is None and spell.end_year is None:
+                continue  # unevaluable — skip on both sides
+            spells.append(spell)
         pred_dict[case_id] = spells
 
     results = composite_metrics(pred_dict, gold_dict, tolerance_years=tol)
