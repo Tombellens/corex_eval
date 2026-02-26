@@ -23,8 +23,9 @@ from pathlib import Path
 # Example: export COREX_DATA_DIR=/home/tom/corex_data
 _DATA_DIR = Path(os.environ.get("COREX_DATA_DIR", "data"))
 
-GOLD_PATH   = _DATA_DIR / "gold"   / "corex_gold.csv"
-SILVER_PATH = _DATA_DIR / "silver" / "corex_silver.csv"
+GOLD_PATH       = _DATA_DIR / "gold"   / "corex_gold.csv"
+SILVER_PATH     = _DATA_DIR / "silver" / "corex_silver.csv"
+SILVER_EDU_PATH = _DATA_DIR / "silver" / "corex_silver_edu.csv"
 
 RESULTS_PATH = Path("results") / "register.csv"
 

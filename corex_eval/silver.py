@@ -3,26 +3,24 @@ silver.py
 =========
 Loader for the CoREx silver standard dataset.
 
-The silver standard is a separate file containing LLM-generated labels
-for career spells and education entries. It is used as input for the
-annotation task — contributors receive a raw extracted string (the silver
-label) and must map it to the correct gold codebook category.
+The silver standard contains LLM-generated labels for career spells and
+education entries. It is used as input for the annotation task — contributors
+receive a raw extracted string (the silver label) and must map it to the
+correct gold codebook category.
 
-Unlike the gold standard (wide format, one row per person-in-a-position),
-the silver standard is in LONG format:
-  - One row per career spell  (for career_position and related variables)
-  - One row per education entry (for edu_degree, uni_subject)
+Two separate files are used, both in LONG format:
 
-Expected columns in corex_silver.csv
---------------------------------------
-For career spell rows:
+  corex_silver.csv      — career spell rows
     case_id, spell_index, job_description_label, workplace_label
 
-For education entry rows:
+  corex_silver_edu.csv  — education rows
     case_id, spell_index, degree_label, subject_label
+    spell_index = 0  → degree row  (degree_label populated)
+    spell_index = 1–5 → subject rows (subject_label populated)
 
-Both row types live in the same file, distinguished by which label
-columns are populated.
+load_silver() automatically merges both files when corex_silver_edu.csv
+exists alongside the main silver file, so callers need not be aware of
+the split.
 
 Cleaning steps (mirrors gold.py):
   1. Drop rows with no case_id
@@ -40,6 +38,7 @@ from typing import TYPE_CHECKING
 from corex_eval.config import (
     ANNOTATION_VARIABLES,
     CASE_ID_COL,
+    SILVER_EDU_PATH,
     SILVER_PATH,
     SPELL_INDEX_COL,
 )
@@ -77,6 +76,14 @@ def load_silver(path: str | Path | None = None) -> "pd.DataFrame":
     _assert_exists(resolved)
 
     df = pd.read_csv(resolved, dtype=str, keep_default_na=False)
+
+    # Auto-merge the education silver file when using the default path and
+    # corex_silver_edu.csv exists.  The two files use different label columns
+    # (job_description_label / workplace_label vs degree_label / subject_label),
+    # so get_silver_inputs() can distinguish them by which column is populated.
+    if path is None and SILVER_EDU_PATH.exists():
+        edu_df = pd.read_csv(SILVER_EDU_PATH, dtype=str, keep_default_na=False)
+        df = pd.concat([df, edu_df], ignore_index=True).fillna("")
 
     df = _drop_missing_case_ids(df)
     df = _coerce_spell_index(df)

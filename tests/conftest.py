@@ -157,3 +157,33 @@ def wrong_annotation_preds(career_spells_test):
         }
         for _, row in career_spells_test.iterrows()
     ])
+
+
+@pytest.fixture(scope="session")
+def perfect_edu_start_preds(test_df):
+    """Predictions that exactly match gold edu_start."""
+    return pd.DataFrame([
+        {"case_id": str(row["case_id"]), "edu_start": row["edu_start"]}
+        for _, row in test_df.iterrows()
+        if pd.notna(row.get("edu_start"))
+    ])
+
+
+@pytest.fixture(scope="session")
+def perfect_edu_end_preds(test_df):
+    """Predictions that exactly match gold edu_end."""
+    return pd.DataFrame([
+        {"case_id": str(row["case_id"]), "edu_end": row["edu_end"]}
+        for _, row in test_df.iterrows()
+        if pd.notna(row.get("edu_end"))
+    ])
+
+
+@pytest.fixture(scope="session")
+def perfect_edu_degree_preds(test_df):
+    """Predictions that exactly match gold edu_degree (atomic string)."""
+    return pd.DataFrame([
+        {"case_id": str(row["case_id"]), "edu_degree": str(row.get("edu_degree", ""))}
+        for _, row in test_df.iterrows()
+        if str(row.get("edu_degree", "")).strip() not in ("", "nan")
+    ])

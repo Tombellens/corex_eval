@@ -182,6 +182,84 @@ class TestEvaluateExtractionCareer:
 
 
 # ---------------------------------------------------------------------------
+# Extraction — atomic integer (edu_start)
+# ---------------------------------------------------------------------------
+
+class TestEvaluateExtractionEduStart:
+
+    def test_perfect_gives_mae_zero(self, perfect_edu_start_preds):
+        r = _eval(perfect_edu_start_preds, task="extraction", variable="edu_start")
+        assert r["mae"]      == pytest.approx(0.0)
+        assert r["accuracy"] == pytest.approx(1.0)
+
+    def test_result_has_required_keys(self, perfect_edu_start_preds):
+        r = _eval(perfect_edu_start_preds, task="extraction", variable="edu_start")
+        for key in ["mae", "accuracy", "n_evaluated", "n_skipped", "task", "variable"]:
+            assert key in r, f"Missing key: {key}"
+
+    def test_task_and_variable_set_correctly(self, perfect_edu_start_preds):
+        r = _eval(perfect_edu_start_preds, task="extraction", variable="edu_start")
+        assert r["task"]     == "extraction"
+        assert r["variable"] == "edu_start"
+
+    def test_n_evaluated_is_positive(self, perfect_edu_start_preds):
+        r = _eval(perfect_edu_start_preds, task="extraction", variable="edu_start")
+        assert r["n_evaluated"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Extraction — atomic integer (edu_end)
+# ---------------------------------------------------------------------------
+
+class TestEvaluateExtractionEduEnd:
+
+    def test_perfect_gives_mae_zero(self, perfect_edu_end_preds):
+        r = _eval(perfect_edu_end_preds, task="extraction", variable="edu_end")
+        assert r["mae"]      == pytest.approx(0.0)
+        assert r["accuracy"] == pytest.approx(1.0)
+
+    def test_result_has_required_keys(self, perfect_edu_end_preds):
+        r = _eval(perfect_edu_end_preds, task="extraction", variable="edu_end")
+        for key in ["mae", "accuracy", "n_evaluated", "n_skipped", "task", "variable"]:
+            assert key in r, f"Missing key: {key}"
+
+    def test_task_and_variable_set_correctly(self, perfect_edu_end_preds):
+        r = _eval(perfect_edu_end_preds, task="extraction", variable="edu_end")
+        assert r["task"]     == "extraction"
+        assert r["variable"] == "edu_end"
+
+
+# ---------------------------------------------------------------------------
+# Extraction — atomic string (edu_degree)
+# ---------------------------------------------------------------------------
+
+class TestEvaluateExtractionEduDegree:
+
+    def test_perfect_gives_accuracy_one(self, perfect_edu_degree_preds):
+        r = _eval(perfect_edu_degree_preds, task="extraction", variable="edu_degree")
+        assert r["accuracy"] == pytest.approx(1.0)
+
+    def test_returns_accuracy_not_mae(self, perfect_edu_degree_preds):
+        r = _eval(perfect_edu_degree_preds, task="extraction", variable="edu_degree")
+        assert "accuracy" in r
+        assert "mae" not in r
+
+    def test_result_has_required_keys(self, perfect_edu_degree_preds):
+        r = _eval(perfect_edu_degree_preds, task="extraction", variable="edu_degree")
+        for key in ["accuracy", "n_evaluated", "n_skipped", "task", "variable"]:
+            assert key in r, f"Missing key: {key}"
+
+    def test_task_and_variable_set_correctly(self, perfect_edu_degree_preds):
+        r = _eval(perfect_edu_degree_preds, task="extraction", variable="edu_degree")
+        assert r["task"]     == "extraction"
+        assert r["variable"] == "edu_degree"
+
+    def test_n_evaluated_is_positive(self, perfect_edu_degree_preds):
+        r = _eval(perfect_edu_degree_preds, task="extraction", variable="edu_degree")
+        assert r["n_evaluated"] > 0
+
+
+# ---------------------------------------------------------------------------
 # Annotation
 # ---------------------------------------------------------------------------
 
@@ -260,6 +338,23 @@ class TestEvaluateValidation:
                 variable="birth_year",
                 submit=True,
             )
+
+    def test_accepts_edu_degree_as_annotation_variable(self):
+        """edu_degree must be accepted as a valid annotation variable name."""
+        from corex_eval.evaluate import _validate_variable
+        # Should not raise — edu_degree is in ANNOTATION_VARIABLES
+        _validate_variable("annotation", "edu_degree")
+
+    def test_accepts_uni_subject_as_annotation_variable(self):
+        """uni_subject must be accepted as a valid annotation variable name."""
+        from corex_eval.evaluate import _validate_variable
+        _validate_variable("annotation", "uni_subject")
+
+    def test_rejects_edu_start_as_annotation_variable(self):
+        """edu_start is an extraction variable, not an annotation variable."""
+        from corex_eval.evaluate import _validate_variable
+        with pytest.raises(ValueError, match="Unknown annotation variable"):
+            _validate_variable("annotation", "edu_start")
 
     def test_warns_when_predictions_missing_for_some_test_cases(self, test_df):
         """Providing predictions for only half the test set should warn."""

@@ -129,6 +129,29 @@ class TestLoadInputsAnnotation:
         with pytest.raises(FileNotFoundError, match="corex_silver.csv"):
             load_inputs(task="annotation", variable="career_position")
 
+    def test_edu_degree_is_valid_annotation_variable(self):
+        """edu_degree must not be rejected as an unknown annotation variable."""
+        from corex_eval import load_inputs
+        try:
+            load_inputs(task="annotation", variable="edu_degree")
+        except (FileNotFoundError, ValueError) as exc:
+            # FileNotFoundError  → silver not yet built (ok)
+            # ValueError         → silver exists but edu columns not yet built (ok)
+            # Either way, the error must NOT say "Unknown annotation variable"
+            assert "Unknown annotation variable" not in str(exc), (
+                f"edu_degree was not recognised as a valid annotation variable: {exc}"
+            )
+
+    def test_uni_subject_is_valid_annotation_variable(self):
+        """uni_subject must not be rejected as an unknown annotation variable."""
+        from corex_eval import load_inputs
+        try:
+            load_inputs(task="annotation", variable="uni_subject")
+        except (FileNotFoundError, ValueError) as exc:
+            assert "Unknown annotation variable" not in str(exc), (
+                f"uni_subject was not recognised as a valid annotation variable: {exc}"
+            )
+
 
 class TestLoadInputsValidation:
 
