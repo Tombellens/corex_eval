@@ -126,9 +126,10 @@ ANNOTATION_VARIABLES: dict[str, dict[str, str]] = {
         "spell_index_col":   None,                    # not spell-level
     },
     "uni_subject": {
-        "gold_col":          "uni_subject_{n}",       # wide format
-        "silver_input_col":  "subject_label",         # from silver standard
-        "spell_index_col":   "spell_index",
+        "gold_col":           "uni_subject",      # stored directly in silver rows
+        "silver_input_col":   "subject_label",    # from silver standard
+        "spell_index_col":    None,               # not spell-level; identified by uni_subject code
+        "alignment_key_col":  "uni_subject",      # (case_id, uni_subject) uniquely identifies each row
     },
 }
 

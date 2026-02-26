@@ -381,22 +381,27 @@ def _evaluate_annotation(
     """
     Align predictions to gold annotation codes and compute classification metrics.
 
-    Alignment key is (case_id, spell_index) for spell-level variables,
-    or just case_id for atomic annotation variables (edu_degree).
+    Alignment key:
+      - (case_id, spell_index)  for spell-level variables (career_position)
+      - (case_id, alignment_key_col) for secondary-keyed variables (uni_subject)
+      - case_id alone           for atomic variables (edu_degree)
     """
     from corex_eval.metrics.annotation import annotation_metrics
     from corex_eval.silver import get_silver_inputs
-    from corex_eval.split import apply_test_split
 
-    var_config   = ANNOTATION_VARIABLES[variable]
-    gold_col     = var_config["gold_col"]
-    has_spells   = var_config["spell_index_col"] is not None
+    var_config     = ANNOTATION_VARIABLES[variable]
+    gold_col       = var_config["gold_col"]
+    has_spells     = var_config["spell_index_col"] is not None
+    alignment_col  = var_config.get("alignment_key_col")
+    has_secondary  = alignment_col is not None and not has_spells
 
     test_case_ids = set(test_df[CASE_ID_COL].astype(str))
 
     # Determine required prediction columns
     if has_spells:
         _require_columns(predictions_df, [CASE_ID_COL, SPELL_INDEX_COL, "predicted_code"])
+    elif has_secondary:
+        _require_columns(predictions_df, [CASE_ID_COL, alignment_col, "predicted_code"])
     else:
         _require_columns(predictions_df, [CASE_ID_COL, "predicted_code"])
 
@@ -405,10 +410,20 @@ def _evaluate_annotation(
         # Gold is wide — reshape to (case_id, spell_index) → gold_code
         from corex_eval.gold import get_career_spells
         career_long = get_career_spells(test_df)
-        gold_dict: dict[tuple, str] = {}
+        gold_dict: dict = {}
         for _, row in career_long.iterrows():
             key = (str(row[CASE_ID_COL]), int(row[SPELL_INDEX_COL]))
             gold_dict[key] = str(row.get("career_position", "")).strip()
+    elif has_secondary:
+        # Gold is stored in the silver's alignment_key_col column.
+        # Alignment key: (case_id, alignment_col_value).
+        silver_inputs = get_silver_inputs(silver_df, variable, gold_case_ids)
+        gold_dict = {}
+        for _, row in silver_inputs.iterrows():
+            if str(row[CASE_ID_COL]) not in test_case_ids:
+                continue
+            key_val  = str(row[alignment_col]).strip()
+            gold_dict[(str(row[CASE_ID_COL]), key_val)] = key_val
     else:
         # Gold is atomic — {case_id: gold_code}
         gold_dict = {
@@ -435,6 +450,9 @@ def _evaluate_annotation(
                 continue
             key = (case_id, int(spell_idx))
             gold_code = gold_dict.get(key)
+        elif has_secondary:
+            sec_val = str(row.get(alignment_col, "")).strip()
+            gold_code = gold_dict.get((case_id, sec_val))
         else:
             gold_code = gold_dict.get(case_id)
 

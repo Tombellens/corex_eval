@@ -18,7 +18,7 @@ Two modes are supported via the --mode flag:
   edu
     Extracts education descriptions (degree and subject labels) from CV text.
     For each politician, we provide:
-      - Their CV text (cv_local)
+      - Their CV text (cv_english with cv_local fallback)
       - The education anchor: coded edu_degree + coded uni_subject fields
     GPT-4o returns:
       - degree_label: raw degree name from the CV
@@ -415,27 +415,36 @@ def extract_edu_for_case(row: pd.Series) -> dict | None:
 def process_edu_result(
     case_id: str,
     result: dict,
-    expected_indices: set[int],
+    index_to_code: dict[int, str],
 ) -> tuple[list[dict], list[dict]]:
     """
     Parse GPT education result into silver rows and failure records.
 
-    Output silver rows use the following spell_index convention:
-      spell_index = 0  → degree row  (degree_label populated, subject_label empty)
-      spell_index = 1–5 → subject rows (subject_label populated, degree_label empty)
+    Output silver rows:
+      degree row  → {case_id, degree_label, uni_subject="", subject_label=""}
+      subject rows → {case_id, degree_label="", uni_subject=<gold code>, subject_label}
+
+    The original gold uni_subject code is stored directly in each subject row
+    (keyed by subject_index via index_to_code), so traceability from extracted
+    label to gold annotation is preserved without relying on positional indices.
+
+    Failure records still use spell_index (0 = degree, 1–5 = subject position)
+    for internal retry tracking only.
 
     Returns (silver_rows, failed_entries).
     """
     silver_rows    = []
     failed_entries = []
 
+    expected_indices = set(index_to_code.keys())
+
     degree_label = (result.get("degree_label") or "").strip()
 
     if degree_label:
         silver_rows.append({
             "case_id":       case_id,
-            "spell_index":   0,
             "degree_label":  degree_label,
+            "uni_subject":   "",
             "subject_label": "",
         })
     else:
@@ -465,8 +474,8 @@ def process_edu_result(
         else:
             silver_rows.append({
                 "case_id":       case_id,
-                "spell_index":   idx,
                 "degree_label":  "",
+                "uni_subject":   index_to_code[idx],
                 "subject_label": sl or "",
             })
 
@@ -520,6 +529,10 @@ def run_edu_pipeline(
 
     print(f"Processing {len(gold_df)} cases (education) with model {MODEL}.")
 
+    cv_col = "cv_english" if "cv_english" in gold_df.columns else "cv_local"
+    if cv_col == "cv_local":
+        print("Warning: cv_english not found, falling back to cv_local.")
+
     # --- Load existing edu silver to allow resuming ---
     if SILVER_EDU_OUT.exists():
         existing_silver = pd.read_csv(SILVER_EDU_OUT, dtype=str)
@@ -541,7 +554,7 @@ def run_edu_pipeline(
             skipped += 1
             continue
 
-        cv_text = str(row.get("cv_local", "")).strip()
+        cv_text = str(row.get(cv_col, "")).strip()
         if not cv_text or cv_text == "nan":
             all_failed_entries.append({
                 "case_id":     case_id,
@@ -555,12 +568,12 @@ def run_edu_pipeline(
             skipped += 1  # no coded subjects — nothing to extract
             continue
 
-        expected_indices = {s["subject_index"] for s in edu_anchor["subjects"]}
-        user_prompt      = build_edu_user_prompt(cv_text, edu_anchor)
-        result           = _call_gpt_raw(EDU_SYSTEM_PROMPT, user_prompt, client)
+        index_to_code = {s["subject_index"]: s["code"] for s in edu_anchor["subjects"]}
+        user_prompt   = build_edu_user_prompt(cv_text, edu_anchor)
+        result        = _call_gpt_raw(EDU_SYSTEM_PROMPT, user_prompt, client)
 
         if result is None:
-            for idx in expected_indices:
+            for idx in index_to_code:
                 all_failed_entries.append({
                     "case_id":     case_id,
                     "spell_index": idx,
@@ -573,7 +586,7 @@ def run_edu_pipeline(
             })
             continue
 
-        silver_rows, failed_entries = process_edu_result(case_id, result, expected_indices)
+        silver_rows, failed_entries = process_edu_result(case_id, result, index_to_code)
         all_silver_rows.extend(silver_rows)
         all_failed_entries.extend(failed_entries)
 

@@ -39,36 +39,55 @@ def _career_row(case_id, spell_index, job_desc="Engineer", workplace="Org"):
         "workplace_label":       workplace,
         "degree_label":          "",
         "subject_label":         "",
+        "uni_subject":           "",
     }
 
 
-def _edu_row(case_id, spell_index, degree_label="", subject_label=""):
+def _edu_degree_row(case_id, degree_label=""):
+    """Education degree row — no spell_index, no uni_subject."""
     return {
         "case_id":               case_id,
-        "spell_index":           spell_index,
+        "spell_index":           "",  # no spell_index for edu rows
         "job_description_label": "",
         "workplace_label":       "",
         "degree_label":          degree_label,
+        "subject_label":         "",
+        "uni_subject":           "",
+    }
+
+
+def _edu_subject_row(case_id, uni_subject, subject_label=""):
+    """Education subject row — identified by (case_id, uni_subject), no spell_index."""
+    return {
+        "case_id":               case_id,
+        "spell_index":           "",  # no spell_index for edu rows
+        "job_description_label": "",
+        "workplace_label":       "",
+        "degree_label":          "",
         "subject_label":         subject_label,
+        "uni_subject":           uni_subject,
     }
 
 
 def _make_mixed_silver_df():
-    """Minimal silver DataFrame with both career and edu rows, spell_index as Int64."""
+    """Minimal silver DataFrame with both career and edu rows."""
     rows = [
         {"case_id": "c1", "spell_index": 1, "job_description_label": "Engineer",
-         "workplace_label": "OrgA", "degree_label": "", "subject_label": ""},
+         "workplace_label": "OrgA", "degree_label": "", "subject_label": "", "uni_subject": ""},
         {"case_id": "c1", "spell_index": 2, "job_description_label": "Manager",
-         "workplace_label": "OrgB", "degree_label": "", "subject_label": ""},
+         "workplace_label": "OrgB", "degree_label": "", "subject_label": "", "uni_subject": ""},
         {"case_id": "c2", "spell_index": 1, "job_description_label": "Doctor",
-         "workplace_label": "Hospital", "degree_label": "", "subject_label": ""},
-        {"case_id": "c3", "spell_index": 0, "job_description_label": "",
-         "workplace_label": "", "degree_label": "Master", "subject_label": ""},
-        {"case_id": "c3", "spell_index": 1, "job_description_label": "",
-         "workplace_label": "", "degree_label": "", "subject_label": "Political Science"},
+         "workplace_label": "Hospital", "degree_label": "", "subject_label": "", "uni_subject": ""},
+        # edu degree row — no spell_index
+        {"case_id": "c3", "spell_index": None, "job_description_label": "",
+         "workplace_label": "", "degree_label": "Master", "subject_label": "", "uni_subject": ""},
+        # edu subject row — identified by uni_subject, no spell_index
+        {"case_id": "c3", "spell_index": None, "job_description_label": "",
+         "workplace_label": "", "degree_label": "", "subject_label": "Political Science",
+         "uni_subject": "601 = Political Science"},
     ]
     df = pd.DataFrame(rows)
-    df["spell_index"] = pd.to_numeric(df["spell_index"]).astype("Int64")
+    df["spell_index"] = pd.to_numeric(df["spell_index"], errors="coerce").astype("Int64")
     return df
 
 
@@ -109,7 +128,8 @@ class TestLoadSilver:
         df = load_silver(path)
         assert str(df["spell_index"].dtype) == "Int64"
 
-    def test_drops_rows_with_unparsable_spell_index(self, tmp_path):
+    def test_drops_career_rows_with_unparsable_spell_index(self, tmp_path):
+        """Career rows (job_description_label non-empty) must have a valid spell_index."""
         from corex_eval.silver import load_silver
         rows = [_career_row("c1", 1), _career_row("c2", "not_a_number")]
         path = _make_silver_csv(tmp_path, rows)
@@ -118,6 +138,21 @@ class TestLoadSilver:
             df = load_silver(path)
         assert len(df) == 1
         assert "c2" not in df["case_id"].tolist()
+
+    def test_keeps_edu_rows_without_spell_index(self, tmp_path):
+        """Education rows legitimately have no spell_index and must not be dropped."""
+        from corex_eval.silver import load_silver
+        rows = [
+            _career_row("c1", 1),
+            _edu_degree_row("c2", degree_label="Master"),
+            _edu_subject_row("c3", uni_subject="601 = History", subject_label="Master in History"),
+        ]
+        path = _make_silver_csv(tmp_path, rows)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            df = load_silver(path)
+        assert "c2" in df["case_id"].tolist()
+        assert "c3" in df["case_id"].tolist()
 
     def test_raises_file_not_found_when_path_missing(self, tmp_path):
         from corex_eval.silver import load_silver
@@ -166,13 +201,13 @@ class TestLoadSilver:
 
     def test_duplicate_check_is_per_variable(self, tmp_path):
         """
-        A case with duplicate edu subject_indices should be dropped,
+        A case with duplicate (case_id, uni_subject) subject rows should be dropped,
         but a case with unique career spell_indices should be kept.
         """
         from corex_eval.silver import load_silver
         rows = [
-            _edu_row("c_dup", 1, subject_label="Law"),
-            _edu_row("c_dup", 1, subject_label="Economics"),  # same subject index
+            _edu_subject_row("c_dup", "601 = History", "Bachelor in History"),
+            _edu_subject_row("c_dup", "601 = History", "Master in History"),  # same code
             _career_row("c_ok", 1),
             _career_row("c_ok", 2),  # unique indices for c_ok
         ]
@@ -190,13 +225,14 @@ class TestLoadSilver:
 
 class TestLoadSilverEduColumns:
 
-    def test_edu_silver_file_has_degree_and_subject_columns(self, tmp_path):
+    def test_edu_silver_file_has_degree_subject_and_uni_subject_columns(self, tmp_path):
         from corex_eval.silver import load_silver
-        rows = [_edu_row("c1", 0, degree_label="Master")]
+        rows = [_edu_degree_row("c1", degree_label="Master")]
         path = _make_silver_csv(tmp_path, rows, "corex_silver_edu.csv")
         df = load_silver(path)
         assert "degree_label"  in df.columns
         assert "subject_label" in df.columns
+        assert "uni_subject"   in df.columns
 
     def test_explicit_path_does_not_auto_merge_edu_file(self, tmp_path):
         """
@@ -209,7 +245,7 @@ class TestLoadSilverEduColumns:
         rows = [_career_row("c1", 1)]
         career_path = _make_silver_csv(tmp_path, rows, "corex_silver.csv")
         # Also write an edu file in the same directory
-        edu_rows = [_edu_row("c2", 0, degree_label="PhD")]
+        edu_rows = [_edu_degree_row("c2", degree_label="PhD")]
         _make_silver_csv(tmp_path, edu_rows, "corex_silver_edu.csv")
         # Load via explicit career path — should NOT pick up edu rows
         df = load_silver(career_path)
@@ -284,24 +320,26 @@ class TestGetSilverInputs:
         df = _make_mixed_silver_df()
         result = get_silver_inputs(df, "uni_subject", gold_case_ids={"c1", "c2", "c3"})
         assert "case_id"       in result.columns
-        assert "spell_index"   in result.columns
+        assert "uni_subject"   in result.columns
         assert "subject_label" in result.columns
+        assert "spell_index"   not in result.columns
 
     def test_uni_subject_only_returns_rows_with_subject_label(self):
         from corex_eval.silver import get_silver_inputs
         df = _make_mixed_silver_df()
         result = get_silver_inputs(df, "uni_subject", gold_case_ids={"c1", "c2", "c3"})
-        # Only c3 spell_index=1 has a non-empty subject_label
+        # Only c3 subject row has a non-empty subject_label
         assert list(result["case_id"]) == ["c3"]
         assert result.iloc[0]["subject_label"] == "Political Science"
+        assert result.iloc[0]["uni_subject"] == "601 = Political Science"
 
     def test_uni_subject_excludes_degree_row(self):
-        """The degree row for c3 (spell_index=0) should not appear for uni_subject."""
+        """The degree row for c3 (no subject_label) should not appear for uni_subject."""
         from corex_eval.silver import get_silver_inputs
         df = _make_mixed_silver_df()
         result = get_silver_inputs(df, "uni_subject", gold_case_ids={"c3"})
         assert len(result) == 1
-        assert int(result.iloc[0]["spell_index"]) == 1
+        assert result.iloc[0]["uni_subject"] == "601 = Political Science"
 
     # --- gold alignment ---
 

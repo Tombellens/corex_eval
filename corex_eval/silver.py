@@ -14,9 +14,10 @@ Two separate files are used, both in LONG format:
     case_id, spell_index, job_description_label, workplace_label
 
   corex_silver_edu.csv  — education rows
-    case_id, spell_index, degree_label, subject_label
-    spell_index = 0  → degree row  (degree_label populated)
-    spell_index = 1–5 → subject rows (subject_label populated)
+    case_id, degree_label, uni_subject, subject_label
+    degree row  → degree_label populated, uni_subject/subject_label empty
+    subject rows → uni_subject (original gold code) + subject_label populated,
+                   degree_label empty; identified by (case_id, uni_subject)
 
 load_silver() automatically merges both files when corex_silver_edu.csv
 exists alongside the main silver file, so callers need not be aware of
@@ -24,9 +25,9 @@ the split.
 
 Cleaning steps (mirrors gold.py):
   1. Drop rows with no case_id
-  2. Drop case_ids with duplicate spell indices (per variable type)
-  3. Align to the gold test/train split (only retain case_ids present
-     in the gold standard after cleaning)
+  2. Coerce spell_index to integer for career rows (edu rows have no spell_index)
+  3. Drop case_ids with duplicate (case_id, spell_index) for career_position
+  4. Drop case_ids with duplicate (case_id, uni_subject) for uni_subject
 """
 
 from __future__ import annotations
@@ -88,6 +89,7 @@ def load_silver(path: str | Path | None = None) -> "pd.DataFrame":
     df = _drop_missing_case_ids(df)
     df = _coerce_spell_index(df)
     df = _drop_duplicate_spell_cases(df)
+    df = _drop_duplicate_subject_cases(df)
 
     return df.reset_index(drop=True)
 
@@ -113,18 +115,20 @@ def get_silver_inputs(
 
     Returns
     -------
-    DataFrame with columns: [case_id, spell_index, <input_col>]
-    where <input_col> is the raw label column for the given variable
-    (e.g. "job_description_label" for career_position).
+    DataFrame with columns: [case_id, <alignment_key>, <input_col>]
+    where <alignment_key> is spell_index for spell-level variables,
+    alignment_key_col (e.g. uni_subject) for secondary-keyed variables,
+    or absent for pure case-level variables (edu_degree).
 
     Only rows where the input column is non-empty and the case_id exists
     in the gold standard are returned.
     """
     _validate_variable(variable)
 
-    var_config   = ANNOTATION_VARIABLES[variable]
-    input_col    = var_config["silver_input_col"]
-    has_spells   = var_config["spell_index_col"] is not None
+    var_config     = ANNOTATION_VARIABLES[variable]
+    input_col      = var_config["silver_input_col"]
+    has_spells     = var_config["spell_index_col"] is not None
+    alignment_col  = var_config.get("alignment_key_col")
 
     # Check the expected input column exists
     if input_col not in df.columns:
@@ -151,6 +155,8 @@ def get_silver_inputs(
     cols = [CASE_ID_COL, input_col]
     if has_spells and SPELL_INDEX_COL in df_var.columns:
         cols = [CASE_ID_COL, SPELL_INDEX_COL, input_col]
+    elif alignment_col and alignment_col in df_var.columns:
+        cols = [CASE_ID_COL, alignment_col, input_col]
 
     return df_var[cols].reset_index(drop=True)
 
@@ -173,20 +179,39 @@ def _drop_missing_case_ids(df: "pd.DataFrame") -> "pd.DataFrame":
 def _coerce_spell_index(df: "pd.DataFrame") -> "pd.DataFrame":
     """
     Coerce spell_index to nullable integer.
-    Rows where spell_index cannot be parsed are dropped with a warning.
+
+    Only rows that carry career-spell content (job_description_label non-empty)
+    are expected to have a valid spell_index. Education rows (degree_label /
+    subject_label) legitimately have no spell_index and are kept with NA.
     """
     import pandas as pd
 
     if SPELL_INDEX_COL not in df.columns:
         return df
 
-    original_len = len(df)
     df[SPELL_INDEX_COL] = pd.to_numeric(
         df[SPELL_INDEX_COL], errors="coerce"
     ).astype("Int64")
 
-    bad_mask = df[SPELL_INDEX_COL].isna()
-    n_bad = bad_mask.sum()
+    # Only flag rows as bad when they belong to a spell-based variable
+    # (i.e., have content in a column that requires a spell_index).
+    spell_content_cols = [
+        cfg["silver_input_col"]
+        for cfg in ANNOTATION_VARIABLES.values()
+        if cfg["spell_index_col"] is not None and cfg["silver_input_col"] in df.columns
+    ]
+
+    if spell_content_cols:
+        has_spell_content = (
+            df[spell_content_cols]
+            .apply(lambda s: s.astype(str).str.strip().ne(""))
+            .any(axis=1)
+        )
+        bad_mask = df[SPELL_INDEX_COL].isna() & has_spell_content
+    else:
+        bad_mask = df[SPELL_INDEX_COL].isna()
+
+    n_bad = int(bad_mask.sum())
     if n_bad:
         warnings.warn(
             f"[silver] Dropped {n_bad} row(s) where spell_index could not "
@@ -242,6 +267,35 @@ def _drop_duplicate_spell_cases(df: "pd.DataFrame") -> "pd.DataFrame":
 
     if bad_case_ids:
         df = df[~df[CASE_ID_COL].astype(str).isin(bad_case_ids)]
+
+    return df.reset_index(drop=True)
+
+
+def _drop_duplicate_subject_cases(df: "pd.DataFrame") -> "pd.DataFrame":
+    """
+    Drop case_ids that have duplicate (case_id, uni_subject) pairs.
+
+    Only checks rows where both subject_label and uni_subject are non-empty.
+    Mirrors the logic of _drop_duplicate_spell_cases for uni_subject rows.
+    """
+    if "uni_subject" not in df.columns or "subject_label" not in df.columns:
+        return df
+
+    subset = df[
+        df["subject_label"].astype(str).str.strip().ne("") &
+        df["uni_subject"].astype(str).str.strip().ne("")
+    ][[CASE_ID_COL, "uni_subject"]]
+
+    duplicated = subset.duplicated(subset=[CASE_ID_COL, "uni_subject"], keep=False)
+    dup_ids = set(subset[duplicated][CASE_ID_COL].astype(str).tolist())
+
+    if dup_ids:
+        warnings.warn(
+            f"[silver] Variable 'uni_subject': found duplicate "
+            f"(case_id, uni_subject) pairs for {len(dup_ids)} case_id(s): "
+            f"{sorted(dup_ids)}. These case_ids are excluded entirely."
+        )
+        df = df[~df[CASE_ID_COL].astype(str).isin(dup_ids)]
 
     return df.reset_index(drop=True)
 
