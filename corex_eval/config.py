@@ -120,11 +120,6 @@ ANNOTATION_VARIABLES: dict[str, dict[str, str]] = {
         "silver_input_col":  "job_description_label", # from silver standard
         "spell_index_col":   "spell_index",
     },
-    "edu_degree": {
-        "gold_col":          "edu_degree",            # atomic in gold
-        "silver_input_col":  "degree_label",          # from silver standard
-        "spell_index_col":   None,                    # not spell-level
-    },
     "uni_subject": {
         "gold_col":          "uni_subject",      # stored directly in silver rows (gold code)
         "silver_input_col":  "subject_label",    # from silver standard

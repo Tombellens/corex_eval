@@ -13,12 +13,11 @@ Two separate files are used, both in LONG format:
   corex_silver.csv      — career spell rows
     case_id, spell_index, job_description_label, workplace_label
 
-  corex_silver_edu.csv  — education rows
-    case_id, degree_label, spell_index, uni_subject, subject_label
-    degree row  → degree_label populated; spell_index/uni_subject/subject_label empty
-    subject rows → spell_index (= N from gold uni_subject_N) + uni_subject (gold code)
-                   + subject_label populated; degree_label empty
-                   identified by (case_id, spell_index)
+  corex_silver_edu.csv  — education rows (one per gold uni_subject_N slot)
+    case_id, spell_index, uni_subject, subject_label
+    spell_index = N from gold uni_subject_N; uni_subject = gold code;
+    subject_label = GPT's combined degree+subject description (e.g. "Master of Law")
+    identified by (case_id, spell_index)
 
 load_silver() automatically merges both files when corex_silver_edu.csv
 exists alongside the main silver file, so callers need not be aware of
@@ -26,7 +25,7 @@ the split.
 
 Cleaning steps (mirrors gold.py):
   1. Drop rows with no case_id
-  2. Coerce spell_index to integer (career rows and subject rows; degree rows have no spell_index)
+  2. Coerce spell_index to integer (all rows must have a valid spell_index)
   3. Drop case_ids with duplicate (case_id, spell_index) for career_position and uni_subject
 """
 

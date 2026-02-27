@@ -317,16 +317,12 @@ EDU_SYSTEM_PROMPT = """You are a precise data extraction assistant. You will be 
 1. A politician's CV text
 2. An education anchor with a coded degree level and coded subject fields
 
-Your task is to extract:
-  - degree_label: the raw degree name as it appears in the CV text
-  - For each coded subject: a combined description of the degree type and field of
-    study as it appears in the CV text (e.g. "Master of Political Sciences",
-    "Bachelor in Applied Economics")
+Your task is to extract for each coded subject: a combined description of the degree
+type and field of study as it appears in the CV text (e.g. "Master of Political
+Sciences", "Bachelor in Applied Economics").
 
 RULES:
 - Return ONLY valid JSON, no explanation, no markdown, no code fences.
-- degree_label: the degree title from the CV (e.g. "Master in Political Sciences",
-  "PhD in Law"). Return null if not clearly present in the CV.
 - subject_label: combine the degree type and subject field as they appear together
   in the CV. Return null and set extraction_failed to true if not found.
 - Never invent information. Return null if unsure.
@@ -334,7 +330,6 @@ RULES:
 
 Output format:
 {
-  "degree_label": "...",
   "subjects": [
     {
       "subject_index": 1,
@@ -420,42 +415,22 @@ def process_edu_result(
     """
     Parse GPT education result into silver rows and failure records.
 
-    Output silver rows:
-      degree row  → {case_id, degree_label, spell_index="", uni_subject="", subject_label=""}
-      subject rows → {case_id, degree_label="", spell_index=N, uni_subject=<gold code>, subject_label}
+    One output row per subject slot:
+      {case_id, spell_index=N, uni_subject=<gold code>, subject_label}
 
     spell_index is the gold N (1–5) from uni_subject_N in the gold standard.
-    uni_subject stores the gold code for direct evaluation alignment.
-    Multiple subject rows for the same case_id are allowed (one per gold slot),
+    uni_subject stores the gold code for evaluation alignment.
+    Multiple rows for the same case_id are allowed (one per gold slot),
     even when two slots share the same code.
 
-    Failure records use spell_index (0 = degree, 1–5 = subject position)
-    for internal retry tracking.
+    Failure records use spell_index (1–5 = subject position) for internal retry.
 
     Returns (silver_rows, failed_entries).
     """
     silver_rows    = []
     failed_entries = []
 
-    expected_indices = set(index_to_code.keys())
-
-    degree_label = (result.get("degree_label") or "").strip()
-
-    if degree_label:
-        silver_rows.append({
-            "case_id":       case_id,
-            "degree_label":  degree_label,
-            "spell_index":   "",
-            "uni_subject":   "",
-            "subject_label": "",
-        })
-    else:
-        failed_entries.append({
-            "case_id":     case_id,
-            "spell_index": 0,
-            "reason":      "degree_label_not_found",
-        })
-
+    expected_indices  = set(index_to_code.keys())
     returned_indices: set[int] = set()
 
     for subj in result.get("subjects", []):
@@ -476,7 +451,6 @@ def process_edu_result(
         else:
             silver_rows.append({
                 "case_id":       case_id,
-                "degree_label":  "",
                 "spell_index":   idx,
                 "uni_subject":   index_to_code[idx],
                 "subject_label": sl or "",
@@ -582,11 +556,6 @@ def run_edu_pipeline(
                     "spell_index": idx,
                     "reason":      "api_call_failed_all_retries",
                 })
-            all_failed_entries.append({
-                "case_id":     case_id,
-                "spell_index": 0,
-                "reason":      "api_call_failed_all_retries",
-            })
             continue
 
         silver_rows, failed_entries = process_edu_result(case_id, result, index_to_code)

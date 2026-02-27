@@ -286,130 +286,101 @@ class TestProcessResult:
 
 class TestProcessEduResult:
     """
-    process_edu_result(case_id, result, index_to_code) now stores the
-    original gold uni_subject code directly in each subject silver row
-    instead of a positional spell_index.
+    process_edu_result(case_id, result, index_to_code) produces one silver row
+    per subject slot: {case_id, spell_index=N, uni_subject=<gold code>, subject_label}.
 
-    Degree rows: {case_id, degree_label, spell_index="", uni_subject="", subject_label=""}
-    Subject rows: {case_id, degree_label="", spell_index=N, uni_subject=<code>, subject_label}
-    Failures carry spell_index (0=degree, n=subject) for internal retry.
+    spell_index = gold N from uni_subject_N.
+    Failures carry spell_index (1–5 = subject position) for internal retry.
     """
 
-    def test_happy_path_degree_and_one_subject(self):
+    def test_happy_path_one_subject(self):
         from corex_eval.build_silver import process_edu_result
         result = {
-            "degree_label": "Master in Political Sciences",
             "subjects": [
                 {"subject_index": 1, "subject_label": "Political Sciences",
                  "extraction_failed": False},
             ],
         }
         silver_rows, failed = process_edu_result("c1", result, {1: "601 = Political Science"})
-        assert len(silver_rows) == 2  # degree row + subject row
+        assert len(silver_rows) == 1
         assert failed == []
-
-    def test_degree_row_has_degree_label_empty_spell_index(self):
-        from corex_eval.build_silver import process_edu_result
-        result = {"degree_label": "Master", "subjects": []}
-        silver_rows, _ = process_edu_result("c1", result, {})
-        degree_rows = [r for r in silver_rows if r.get("degree_label")]
-        assert len(degree_rows) == 1
-        assert degree_rows[0]["degree_label"] == "Master"
-        assert degree_rows[0].get("uni_subject", "") == ""
-        assert degree_rows[0].get("spell_index", "") == ""
 
     def test_subject_row_stores_uni_subject_code_and_spell_index(self):
         from corex_eval.build_silver import process_edu_result
         result = {
-            "degree_label": "PhD",
             "subjects": [
                 {"subject_index": 2, "subject_label": "Law", "extraction_failed": False},
             ],
         }
         silver_rows, _ = process_edu_result("c1", result, {2: "301 = Law"})
-        subject_rows = [r for r in silver_rows if r.get("uni_subject")]
-        assert len(subject_rows) == 1
-        assert subject_rows[0]["uni_subject"] == "301 = Law"
-        assert subject_rows[0]["subject_label"] == "Law"
-        assert subject_rows[0]["spell_index"] == 2
+        assert len(silver_rows) == 1
+        assert silver_rows[0]["uni_subject"] == "301 = Law"
+        assert silver_rows[0]["subject_label"] == "Law"
+        assert silver_rows[0]["spell_index"] == 2
 
-    def test_null_degree_label_is_failure(self):
+    def test_multiple_subjects_produce_multiple_rows(self):
         from corex_eval.build_silver import process_edu_result
         result = {
-            "degree_label": None,
             "subjects": [
-                {"subject_index": 1, "subject_label": "Economics", "extraction_failed": False}
+                {"subject_index": 1, "subject_label": "History",    "extraction_failed": False},
+                {"subject_index": 2, "subject_label": "Philosophy", "extraction_failed": False},
             ],
         }
-        _, failed = process_edu_result("c1", result, {1: "Economics"})
-        degree_failures = [f for f in failed if f["spell_index"] == 0]
-        assert len(degree_failures) == 1
-        assert degree_failures[0]["reason"] == "degree_label_not_found"
-
-    def test_empty_string_degree_label_is_failure(self):
-        from corex_eval.build_silver import process_edu_result
-        result = {"degree_label": "", "subjects": []}
-        _, failed = process_edu_result("c1", result, {})
-        assert any(f["spell_index"] == 0 for f in failed)
+        silver_rows, failed = process_edu_result(
+            "c1", result, {1: "02 = Arts", 2: "02 = Arts"}
+        )
+        assert len(silver_rows) == 2
+        assert failed == []
+        assert silver_rows[0]["spell_index"] == 1
+        assert silver_rows[1]["spell_index"] == 2
 
     def test_subject_extraction_failed_flag_records_failure(self):
         from corex_eval.build_silver import process_edu_result
         result = {
-            "degree_label": "Master",
             "subjects": [
                 {"subject_index": 1, "subject_label": None, "extraction_failed": True},
             ],
         }
         _, failed = process_edu_result("c1", result, {1: "601 = History"})
-        subject_failures = [f for f in failed if f["spell_index"] == 1]
-        assert len(subject_failures) == 1
-        assert subject_failures[0]["reason"] == "extraction_failed_by_model"
+        assert len(failed) == 1
+        assert failed[0]["spell_index"] == 1
+        assert failed[0]["reason"] == "extraction_failed_by_model"
 
     def test_hallucinated_subject_index_is_ignored(self):
         from corex_eval.build_silver import process_edu_result
         result = {
-            "degree_label": "PhD",
             "subjects": [
                 {"subject_index": 1,   "subject_label": "Law",   "extraction_failed": False},
                 {"subject_index": 999, "subject_label": "Ghost", "extraction_failed": False},
             ],
         }
         silver_rows, _ = process_edu_result("c1", result, {1: "301 = Law"})
-        subject_rows = [r for r in silver_rows if r.get("uni_subject")]
-        assert len(subject_rows) == 1
-        assert subject_rows[0]["uni_subject"] == "301 = Law"
+        assert len(silver_rows) == 1
+        assert silver_rows[0]["uni_subject"] == "301 = Law"
 
     def test_missing_subject_recorded_as_failure(self):
         from corex_eval.build_silver import process_edu_result
-        # GPT returns nothing for subjects, but we expected indices {1, 2}
-        result = {"degree_label": "PhD", "subjects": []}
+        result = {"subjects": []}
         _, failed = process_edu_result("c1", result, {1: "History", 2: "Law"})
-        subject_failures = [f for f in failed if f["spell_index"] in {1, 2}]
-        assert len(subject_failures) == 2
-        assert all(f["reason"] == "subject_not_returned_by_model" for f in subject_failures)
+        assert len(failed) == 2
+        assert all(f["reason"] == "subject_not_returned_by_model" for f in failed)
 
     def test_silver_row_has_correct_keys(self):
         from corex_eval.build_silver import process_edu_result
         result = {
-            "degree_label": "Master",
             "subjects": [
                 {"subject_index": 1, "subject_label": "Economics", "extraction_failed": False}
             ],
         }
         silver_rows, _ = process_edu_result("c1", result, {1: "Economics"})
-        degree_rows  = [r for r in silver_rows if r.get("degree_label")]
-        subject_rows = [r for r in silver_rows if r.get("uni_subject")]
-        for row in degree_rows:
-            for key in ["case_id", "degree_label", "spell_index", "uni_subject", "subject_label"]:
-                assert key in row, f"Missing key '{key}' in degree row {row}"
-        for row in subject_rows:
-            for key in ["case_id", "degree_label", "spell_index", "uni_subject", "subject_label"]:
-                assert key in row, f"Missing key '{key}' in subject row {row}"
+        for row in silver_rows:
+            for key in ["case_id", "spell_index", "uni_subject", "subject_label"]:
+                assert key in row, f"Missing key '{key}' in row {row}"
 
     def test_failure_includes_case_id(self):
         from corex_eval.build_silver import process_edu_result
-        result = {"degree_label": None, "subjects": []}
-        _, failed = process_edu_result("case_99", result, {})
+        result = {"subjects": []}
+        _, failed = process_edu_result("case_99", result, {1: "History"})
         assert all(f["case_id"] == "case_99" for f in failed)
 
 
