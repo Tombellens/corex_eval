@@ -290,9 +290,9 @@ class TestProcessEduResult:
     original gold uni_subject code directly in each subject silver row
     instead of a positional spell_index.
 
-    Degree rows: {case_id, degree_label, uni_subject="", subject_label=""}
-    Subject rows: {case_id, degree_label="", uni_subject=<code>, subject_label}
-    Failures still carry spell_index (0=degree, n=subject) for internal retry.
+    Degree rows: {case_id, degree_label, spell_index="", uni_subject="", subject_label=""}
+    Subject rows: {case_id, degree_label="", spell_index=N, uni_subject=<code>, subject_label}
+    Failures carry spell_index (0=degree, n=subject) for internal retry.
     """
 
     def test_happy_path_degree_and_one_subject(self):
@@ -308,7 +308,7 @@ class TestProcessEduResult:
         assert len(silver_rows) == 2  # degree row + subject row
         assert failed == []
 
-    def test_degree_row_has_degree_label_no_spell_index(self):
+    def test_degree_row_has_degree_label_empty_spell_index(self):
         from corex_eval.build_silver import process_edu_result
         result = {"degree_label": "Master", "subjects": []}
         silver_rows, _ = process_edu_result("c1", result, {})
@@ -316,9 +316,9 @@ class TestProcessEduResult:
         assert len(degree_rows) == 1
         assert degree_rows[0]["degree_label"] == "Master"
         assert degree_rows[0].get("uni_subject", "") == ""
-        assert "spell_index" not in degree_rows[0]
+        assert degree_rows[0].get("spell_index", "") == ""
 
-    def test_subject_row_stores_uni_subject_code(self):
+    def test_subject_row_stores_uni_subject_code_and_spell_index(self):
         from corex_eval.build_silver import process_edu_result
         result = {
             "degree_label": "PhD",
@@ -331,6 +331,7 @@ class TestProcessEduResult:
         assert len(subject_rows) == 1
         assert subject_rows[0]["uni_subject"] == "301 = Law"
         assert subject_rows[0]["subject_label"] == "Law"
+        assert subject_rows[0]["spell_index"] == 2
 
     def test_null_degree_label_is_failure(self):
         from corex_eval.build_silver import process_edu_result
@@ -399,10 +400,10 @@ class TestProcessEduResult:
         degree_rows  = [r for r in silver_rows if r.get("degree_label")]
         subject_rows = [r for r in silver_rows if r.get("uni_subject")]
         for row in degree_rows:
-            for key in ["case_id", "degree_label", "uni_subject", "subject_label"]:
+            for key in ["case_id", "degree_label", "spell_index", "uni_subject", "subject_label"]:
                 assert key in row, f"Missing key '{key}' in degree row {row}"
         for row in subject_rows:
-            for key in ["case_id", "degree_label", "uni_subject", "subject_label"]:
+            for key in ["case_id", "degree_label", "spell_index", "uni_subject", "subject_label"]:
                 assert key in row, f"Missing key '{key}' in subject row {row}"
 
     def test_failure_includes_case_id(self):

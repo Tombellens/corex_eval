@@ -14,10 +14,11 @@ Two separate files are used, both in LONG format:
     case_id, spell_index, job_description_label, workplace_label
 
   corex_silver_edu.csv  — education rows
-    case_id, degree_label, uni_subject, subject_label
-    degree row  → degree_label populated, uni_subject/subject_label empty
-    subject rows → uni_subject (original gold code) + subject_label populated,
-                   degree_label empty; identified by (case_id, uni_subject)
+    case_id, degree_label, spell_index, uni_subject, subject_label
+    degree row  → degree_label populated; spell_index/uni_subject/subject_label empty
+    subject rows → spell_index (= N from gold uni_subject_N) + uni_subject (gold code)
+                   + subject_label populated; degree_label empty
+                   identified by (case_id, spell_index)
 
 load_silver() automatically merges both files when corex_silver_edu.csv
 exists alongside the main silver file, so callers need not be aware of
@@ -25,9 +26,8 @@ the split.
 
 Cleaning steps (mirrors gold.py):
   1. Drop rows with no case_id
-  2. Coerce spell_index to integer for career rows (edu rows have no spell_index)
-  3. Drop case_ids with duplicate (case_id, spell_index) for career_position
-  4. Drop case_ids with duplicate (case_id, uni_subject) for uni_subject
+  2. Coerce spell_index to integer (career rows and subject rows; degree rows have no spell_index)
+  3. Drop case_ids with duplicate (case_id, spell_index) for career_position and uni_subject
 """
 
 from __future__ import annotations
@@ -89,7 +89,6 @@ def load_silver(path: str | Path | None = None) -> "pd.DataFrame":
     df = _drop_missing_case_ids(df)
     df = _coerce_spell_index(df)
     df = _drop_duplicate_spell_cases(df)
-    df = _drop_duplicate_subject_cases(df)
 
     return df.reset_index(drop=True)
 
@@ -128,7 +127,6 @@ def get_silver_inputs(
     var_config     = ANNOTATION_VARIABLES[variable]
     input_col      = var_config["silver_input_col"]
     has_spells     = var_config["spell_index_col"] is not None
-    alignment_col  = var_config.get("alignment_key_col")
 
     # Check the expected input column exists
     if input_col not in df.columns:
@@ -152,11 +150,17 @@ def get_silver_inputs(
         )
 
     # Select and return relevant columns
+    gold_col = var_config["gold_col"]
+    gold_stored_in_silver = "{n}" not in gold_col and gold_col in df_var.columns
+
     cols = [CASE_ID_COL, input_col]
     if has_spells and SPELL_INDEX_COL in df_var.columns:
         cols = [CASE_ID_COL, SPELL_INDEX_COL, input_col]
-    elif alignment_col and alignment_col in df_var.columns:
-        cols = [CASE_ID_COL, alignment_col, input_col]
+
+    # Include the gold code column when it is stored inline in the silver rows
+    # (e.g. uni_subject), so callers can use it for evaluation alignment.
+    if gold_stored_in_silver and gold_col not in cols:
+        cols.append(gold_col)
 
     return df_var[cols].reset_index(drop=True)
 
@@ -267,35 +271,6 @@ def _drop_duplicate_spell_cases(df: "pd.DataFrame") -> "pd.DataFrame":
 
     if bad_case_ids:
         df = df[~df[CASE_ID_COL].astype(str).isin(bad_case_ids)]
-
-    return df.reset_index(drop=True)
-
-
-def _drop_duplicate_subject_cases(df: "pd.DataFrame") -> "pd.DataFrame":
-    """
-    Drop case_ids that have duplicate (case_id, uni_subject) pairs.
-
-    Only checks rows where both subject_label and uni_subject are non-empty.
-    Mirrors the logic of _drop_duplicate_spell_cases for uni_subject rows.
-    """
-    if "uni_subject" not in df.columns or "subject_label" not in df.columns:
-        return df
-
-    subset = df[
-        df["subject_label"].astype(str).str.strip().ne("") &
-        df["uni_subject"].astype(str).str.strip().ne("")
-    ][[CASE_ID_COL, "uni_subject"]]
-
-    duplicated = subset.duplicated(subset=[CASE_ID_COL, "uni_subject"], keep=False)
-    dup_ids = set(subset[duplicated][CASE_ID_COL].astype(str).tolist())
-
-    if dup_ids:
-        warnings.warn(
-            f"[silver] Variable 'uni_subject': found duplicate "
-            f"(case_id, uni_subject) pairs for {len(dup_ids)} case_id(s): "
-            f"{sorted(dup_ids)}. These case_ids are excluded entirely."
-        )
-        df = df[~df[CASE_ID_COL].astype(str).isin(dup_ids)]
 
     return df.reset_index(drop=True)
 

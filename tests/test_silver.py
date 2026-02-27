@@ -56,11 +56,11 @@ def _edu_degree_row(case_id, degree_label=""):
     }
 
 
-def _edu_subject_row(case_id, uni_subject, subject_label=""):
-    """Education subject row — identified by (case_id, uni_subject), no spell_index."""
+def _edu_subject_row(case_id, uni_subject, subject_label="", spell_index=1):
+    """Education subject row — identified by (case_id, spell_index), gold code in uni_subject."""
     return {
         "case_id":               case_id,
-        "spell_index":           "",  # no spell_index for edu rows
+        "spell_index":           spell_index,  # gold N from uni_subject_N
         "job_description_label": "",
         "workplace_label":       "",
         "degree_label":          "",
@@ -81,8 +81,8 @@ def _make_mixed_silver_df():
         # edu degree row — no spell_index
         {"case_id": "c3", "spell_index": None, "job_description_label": "",
          "workplace_label": "", "degree_label": "Master", "subject_label": "", "uni_subject": ""},
-        # edu subject row — identified by uni_subject, no spell_index
-        {"case_id": "c3", "spell_index": None, "job_description_label": "",
+        # edu subject row — identified by (case_id, spell_index=1), gold code in uni_subject
+        {"case_id": "c3", "spell_index": 1, "job_description_label": "",
          "workplace_label": "", "degree_label": "", "subject_label": "Political Science",
          "uni_subject": "601 = Political Science"},
     ]
@@ -139,13 +139,14 @@ class TestLoadSilver:
         assert len(df) == 1
         assert "c2" not in df["case_id"].tolist()
 
-    def test_keeps_edu_rows_without_spell_index(self, tmp_path):
-        """Education rows legitimately have no spell_index and must not be dropped."""
+    def test_keeps_edu_degree_rows_without_spell_index(self, tmp_path):
+        """Degree rows legitimately have no spell_index and must not be dropped."""
         from corex_eval.silver import load_silver
         rows = [
             _career_row("c1", 1),
             _edu_degree_row("c2", degree_label="Master"),
-            _edu_subject_row("c3", uni_subject="601 = History", subject_label="Master in History"),
+            _edu_subject_row("c3", uni_subject="601 = History", subject_label="Master in History",
+                             spell_index=1),
         ]
         path = _make_silver_csv(tmp_path, rows)
         with warnings.catch_warnings():
@@ -201,13 +202,13 @@ class TestLoadSilver:
 
     def test_duplicate_check_is_per_variable(self, tmp_path):
         """
-        A case with duplicate (case_id, uni_subject) subject rows should be dropped,
+        A case with duplicate (case_id, spell_index) subject rows should be dropped,
         but a case with unique career spell_indices should be kept.
         """
         from corex_eval.silver import load_silver
         rows = [
-            _edu_subject_row("c_dup", "601 = History", "Bachelor in History"),
-            _edu_subject_row("c_dup", "601 = History", "Master in History"),  # same code
+            _edu_subject_row("c_dup", "601 = History", "Bachelor in History", spell_index=1),
+            _edu_subject_row("c_dup", "601 = History", "Master in History",   spell_index=1),  # same index
             _career_row("c_ok", 1),
             _career_row("c_ok", 2),  # unique indices for c_ok
         ]
@@ -320,9 +321,9 @@ class TestGetSilverInputs:
         df = _make_mixed_silver_df()
         result = get_silver_inputs(df, "uni_subject", gold_case_ids={"c1", "c2", "c3"})
         assert "case_id"       in result.columns
-        assert "uni_subject"   in result.columns
+        assert "spell_index"   in result.columns
         assert "subject_label" in result.columns
-        assert "spell_index"   not in result.columns
+        assert "uni_subject"   in result.columns
 
     def test_uni_subject_only_returns_rows_with_subject_label(self):
         from corex_eval.silver import get_silver_inputs

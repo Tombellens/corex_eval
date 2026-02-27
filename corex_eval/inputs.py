@@ -250,11 +250,8 @@ def _annotation_inputs(
         # This is expected — just the other split's rows being filtered out
         pass
 
-    alignment_col = ANNOTATION_VARIABLES.get(variable, {}).get("alignment_key_col")
     if SPELL_INDEX_COL in result.columns:
         sort_cols = [CASE_ID_COL, SPELL_INDEX_COL]
-    elif alignment_col and alignment_col in result.columns:
-        sort_cols = [CASE_ID_COL, alignment_col]
     else:
         sort_cols = [CASE_ID_COL]
 

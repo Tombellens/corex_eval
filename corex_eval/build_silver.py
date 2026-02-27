@@ -421,15 +421,16 @@ def process_edu_result(
     Parse GPT education result into silver rows and failure records.
 
     Output silver rows:
-      degree row  → {case_id, degree_label, uni_subject="", subject_label=""}
-      subject rows → {case_id, degree_label="", uni_subject=<gold code>, subject_label}
+      degree row  → {case_id, degree_label, spell_index="", uni_subject="", subject_label=""}
+      subject rows → {case_id, degree_label="", spell_index=N, uni_subject=<gold code>, subject_label}
 
-    The original gold uni_subject code is stored directly in each subject row
-    (keyed by subject_index via index_to_code), so traceability from extracted
-    label to gold annotation is preserved without relying on positional indices.
+    spell_index is the gold N (1–5) from uni_subject_N in the gold standard.
+    uni_subject stores the gold code for direct evaluation alignment.
+    Multiple subject rows for the same case_id are allowed (one per gold slot),
+    even when two slots share the same code.
 
-    Failure records still use spell_index (0 = degree, 1–5 = subject position)
-    for internal retry tracking only.
+    Failure records use spell_index (0 = degree, 1–5 = subject position)
+    for internal retry tracking.
 
     Returns (silver_rows, failed_entries).
     """
@@ -444,6 +445,7 @@ def process_edu_result(
         silver_rows.append({
             "case_id":       case_id,
             "degree_label":  degree_label,
+            "spell_index":   "",
             "uni_subject":   "",
             "subject_label": "",
         })
@@ -475,6 +477,7 @@ def process_edu_result(
             silver_rows.append({
                 "case_id":       case_id,
                 "degree_label":  "",
+                "spell_index":   idx,
                 "uni_subject":   index_to_code[idx],
                 "subject_label": sl or "",
             })
