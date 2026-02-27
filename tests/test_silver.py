@@ -31,10 +31,12 @@ def _make_silver_csv(tmp_path, rows, filename="corex_silver.csv"):
     return path
 
 
-def _career_row(case_id, spell_index, job_desc="Engineer", workplace="Org"):
+def _career_row(case_id, spell_index, job_desc="Engineer", workplace="Org",
+                career_position="401 = politics"):
     return {
         "case_id":               case_id,
         "spell_index":           spell_index,
+        "career_position":       career_position,
         "job_description_label": job_desc,
         "workplace_label":       workplace,
         "subject_label":         "",
@@ -57,16 +59,19 @@ def _edu_subject_row(case_id, uni_subject, subject_label="", spell_index=1):
 def _make_mixed_silver_df():
     """Minimal silver DataFrame with both career and edu rows."""
     rows = [
-        {"case_id": "c1", "spell_index": 1, "job_description_label": "Engineer",
-         "workplace_label": "OrgA", "subject_label": "", "uni_subject": ""},
-        {"case_id": "c1", "spell_index": 2, "job_description_label": "Manager",
-         "workplace_label": "OrgB", "subject_label": "", "uni_subject": ""},
-        {"case_id": "c2", "spell_index": 1, "job_description_label": "Doctor",
-         "workplace_label": "Hospital", "subject_label": "", "uni_subject": ""},
+        {"case_id": "c1", "spell_index": 1, "career_position": "401 = politics",
+         "job_description_label": "Engineer", "workplace_label": "OrgA",
+         "subject_label": "", "uni_subject": ""},
+        {"case_id": "c1", "spell_index": 2, "career_position": "301 = local gov",
+         "job_description_label": "Manager", "workplace_label": "OrgB",
+         "subject_label": "", "uni_subject": ""},
+        {"case_id": "c2", "spell_index": 1, "career_position": "401 = politics",
+         "job_description_label": "Doctor", "workplace_label": "Hospital",
+         "subject_label": "", "uni_subject": ""},
         # edu subject row — identified by (case_id, spell_index=1), gold code in uni_subject
-        {"case_id": "c3", "spell_index": 1, "job_description_label": "",
-         "workplace_label": "", "subject_label": "Political Science",
-         "uni_subject": "601 = Political Science"},
+        {"case_id": "c3", "spell_index": 1, "career_position": "",
+         "job_description_label": "", "workplace_label": "",
+         "subject_label": "Political Science", "uni_subject": "601 = Political Science"},
     ]
     df = pd.DataFrame(rows)
     df["spell_index"] = pd.to_numeric(df["spell_index"], errors="coerce").astype("Int64")
@@ -234,6 +239,7 @@ class TestGetSilverInputs:
         result = get_silver_inputs(df, "career_position", gold_case_ids={"c1", "c2", "c3"})
         assert "case_id"               in result.columns
         assert "spell_index"           in result.columns
+        assert "career_position"       in result.columns
         assert "job_description_label" in result.columns
 
     def test_career_position_excludes_rows_with_empty_label(self):

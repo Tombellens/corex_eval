@@ -201,6 +201,8 @@ class TestExtractEduForCase:
 
 class TestProcessResult:
 
+    _INDEX_TO_CAT = {1: "401 = politics", 2: "301 = local government"}
+
     def _result(self, spells):
         return {"spells": spells}
 
@@ -215,22 +217,29 @@ class TestProcessResult:
     def test_happy_path_all_spells_returned(self):
         from corex_eval.build_silver import process_result
         result = self._result([self._spell(1), self._spell(2, job="Mayor", workplace="City")])
-        silver_rows, failed = process_result("c1", result, {1, 2})
+        silver_rows, failed = process_result("c1", result, self._INDEX_TO_CAT)
         assert len(silver_rows) == 2
         assert failed == []
 
     def test_silver_row_has_correct_keys(self):
         from corex_eval.build_silver import process_result
         result = self._result([self._spell(1)])
-        silver_rows, _ = process_result("c1", result, {1})
+        silver_rows, _ = process_result("c1", result, {1: "401 = politics"})
         row = silver_rows[0]
-        for key in ["case_id", "spell_index", "job_description_label", "workplace_label"]:
+        for key in ["case_id", "spell_index", "career_position",
+                    "job_description_label", "workplace_label"]:
             assert key in row, f"Missing key: {key}"
+
+    def test_silver_row_stores_gold_career_position(self):
+        from corex_eval.build_silver import process_result
+        result = self._result([self._spell(1)])
+        silver_rows, _ = process_result("c1", result, {1: "401 = politics"})
+        assert silver_rows[0]["career_position"] == "401 = politics"
 
     def test_extraction_failed_flag_records_failure(self):
         from corex_eval.build_silver import process_result
         result = self._result([self._spell(1, failed=True)])
-        silver_rows, failed = process_result("c1", result, {1})
+        silver_rows, failed = process_result("c1", result, {1: "401 = politics"})
         assert silver_rows == []
         assert len(failed) == 1
         assert failed[0]["reason"] == "extraction_failed_by_model"
@@ -243,7 +252,7 @@ class TestProcessResult:
             "workplace_label":       None,
             "extraction_failed":     False,
         }])
-        silver_rows, failed = process_result("c1", result, {1})
+        silver_rows, failed = process_result("c1", result, {1: "401 = politics"})
         assert silver_rows == []
         assert len(failed) == 1
 
@@ -253,7 +262,7 @@ class TestProcessResult:
             self._spell(1),
             self._spell(999, job="Ghost", workplace="Nowhere"),
         ])
-        silver_rows, _ = process_result("c1", result, {1})
+        silver_rows, _ = process_result("c1", result, {1: "401 = politics"})
         assert len(silver_rows) == 1
         assert silver_rows[0]["spell_index"] == 1
 
@@ -261,7 +270,7 @@ class TestProcessResult:
         from corex_eval.build_silver import process_result
         # GPT only returns spell 1, but we expected {1, 2}
         result = self._result([self._spell(1)])
-        _, failed = process_result("c1", result, {1, 2})
+        _, failed = process_result("c1", result, self._INDEX_TO_CAT)
         missing_failures = [f for f in failed if f["spell_index"] == 2]
         assert len(missing_failures) == 1
         assert missing_failures[0]["reason"] == "spell_not_returned_by_model"
@@ -269,13 +278,13 @@ class TestProcessResult:
     def test_failure_includes_case_id(self):
         from corex_eval.build_silver import process_result
         result = self._result([self._spell(1, failed=True)])
-        _, failed = process_result("case_42", result, {1})
+        _, failed = process_result("case_42", result, {1: "401 = politics"})
         assert failed[0]["case_id"] == "case_42"
 
     def test_empty_spells_list_marks_all_as_missing(self):
         from corex_eval.build_silver import process_result
         result = self._result([])
-        _, failed = process_result("c1", result, {1, 2, 3})
+        _, failed = process_result("c1", result, {1: "A", 2: "B", 3: "C"})
         assert len(failed) == 3
         assert all(f["reason"] == "spell_not_returned_by_model" for f in failed)
 

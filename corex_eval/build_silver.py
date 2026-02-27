@@ -186,21 +186,30 @@ def call_gpt(cv_text: str, spells: list[dict], client) -> dict | None:
 # Result processing
 # ---------------------------------------------------------------------------
 
-def process_result(case_id: str, result: dict, spell_index_set: set[int]) -> tuple[list[dict], list[dict]]:
+def process_result(
+    case_id: str,
+    result: dict,
+    index_to_category: dict[int, str],
+) -> tuple[list[dict], list[dict]]:
     """
     Parse GPT result into silver rows and per-spell failures.
+
+    Each silver row stores the gold career_position code alongside the
+    extracted labels, so evaluation does not need to look it up from the
+    wide gold CSV:
+      {case_id, spell_index, career_position, job_description_label, workplace_label}
 
     Returns (silver_rows, failed_spells) where failed_spells is a list of
     {case_id, spell_index, reason} dicts.
     """
-    silver_rows  = []
+    silver_rows   = []
     failed_spells = []
 
     returned_indices = set()
 
     for spell in result.get("spells", []):
         idx = spell.get("spell_index")
-        if idx not in spell_index_set:
+        if idx not in index_to_category:
             # GPT hallucinated a spell_index we didn't ask for — ignore
             continue
 
@@ -219,12 +228,13 @@ def process_result(case_id: str, result: dict, spell_index_set: set[int]) -> tup
             silver_rows.append({
                 "case_id":               case_id,
                 "spell_index":           idx,
+                "career_position":       index_to_category[idx],
                 "job_description_label": jd or "",
                 "workplace_label":       wp or "",
             })
 
     # Spells GPT didn't return at all
-    for idx in spell_index_set - returned_indices:
+    for idx in set(index_to_category) - returned_indices:
         failed_spells.append({
             "case_id":     case_id,
             "spell_index": idx,
@@ -667,7 +677,7 @@ def run_pipeline(
             skipped += 1  # no evaluable spells — nothing to extract
             continue
 
-        spell_index_set = {s["spell_index"] for s in spells}
+        index_to_category = {s["spell_index"]: s["category"] for s in spells}
 
         # Call GPT
         result = call_gpt(cv_text, spells, client)
@@ -682,7 +692,7 @@ def run_pipeline(
                 })
             continue
 
-        silver_rows, failed_spells = process_result(case_id, result, spell_index_set)
+        silver_rows, failed_spells = process_result(case_id, result, index_to_category)
         all_silver_rows.extend(silver_rows)
         all_failed_spells.extend(failed_spells)
 

@@ -116,8 +116,8 @@ EXTRACTION_VARIABLES = set(ATOMIC_VARIABLES) | set(COMPOSITE_VARIABLES)
 # and the expected silver column name in the silver standard
 ANNOTATION_VARIABLES: dict[str, dict[str, str]] = {
     "career_position": {
-        "gold_col":          "career_position_{n}",   # wide format, spell-level
-        "silver_input_col":  "job_description_label", # from silver standard
+        "gold_col":          "career_position",        # stored directly in silver rows (gold code)
+        "silver_input_col":  "job_description_label",  # from silver standard
         "spell_index_col":   "spell_index",
     },
     "uni_subject": {

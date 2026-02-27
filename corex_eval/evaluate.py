@@ -383,11 +383,10 @@ def _evaluate_annotation(
 
     Alignment key:
       - (case_id, spell_index)  for spell-level variables (career_position, uni_subject)
-      - case_id alone           for atomic variables (edu_degree)
+      - case_id alone           for atomic variables
 
-    For spell-level variables, gold is sourced differently depending on storage:
-      - career_position: gold lives in the gold CSV in wide format (career_position_{n})
-      - uni_subject: gold is stored directly in each silver row (uni_subject column)
+    For all spell-level variables, the gold code is stored inline in each silver
+    row (career_position / uni_subject columns) so no wide-format reshaping is needed.
     """
     from corex_eval.metrics.annotation import annotation_metrics
     from corex_eval.silver import get_silver_inputs
@@ -395,7 +394,6 @@ def _evaluate_annotation(
     var_config  = ANNOTATION_VARIABLES[variable]
     gold_col    = var_config["gold_col"]
     has_spells  = var_config["spell_index_col"] is not None
-    wide_gold   = "{n}" in gold_col   # True for career_position, False for uni_subject
 
     test_case_ids = set(test_df[CASE_ID_COL].astype(str))
 
@@ -407,16 +405,9 @@ def _evaluate_annotation(
 
     # Build gold dict
     gold_dict: dict = {}
-    if has_spells and wide_gold:
-        # Gold is wide — reshape to (case_id, spell_index) → gold_code
-        from corex_eval.gold import get_career_spells
-        career_long = get_career_spells(test_df)
-        for _, row in career_long.iterrows():
-            key = (str(row[CASE_ID_COL]), int(row[SPELL_INDEX_COL]))
-            gold_dict[key] = str(row.get("career_position", "")).strip()
-    elif has_spells and not wide_gold:
-        # Gold code is stored inline in the silver rows (e.g. uni_subject column).
-        # Alignment key: (case_id, spell_index).
+    if has_spells:
+        # Gold code is stored inline in the silver rows.
+        # Alignment key: (case_id, spell_index) → gold_code.
         silver_inputs = get_silver_inputs(silver_df, variable, gold_case_ids)
         for _, row in silver_inputs.iterrows():
             if str(row[CASE_ID_COL]) not in test_case_ids:
