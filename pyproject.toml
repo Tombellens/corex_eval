@@ -21,6 +21,12 @@ embeddings = [
     "torch",
     "sentence-transformers>=2.2",
 ]
+# Required for BERT fine-tuning experiments
+bert = [
+    "torch",
+    "transformers>=4.35",
+    "accelerate>=0.24",
+]
 # Required for development and running tests
 dev = [
     "pytest>=7.4",

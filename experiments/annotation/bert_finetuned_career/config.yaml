@@ -1,0 +1,10 @@
+task: annotation
+variable: career_position
+model: bert-base-multilingual-cased
+contributor: tom
+description: Fine-tuned multilingual BERT (mmBERT) baseline for career_position annotation
+notes: >
+  Text input: job_description_label (128 tokens).
+  5 epochs, lr=2e-5, batch_size=32, weight_decay=0.01.
+  Label set derived from silver standard training split.
+  No workplace context — job description only.
