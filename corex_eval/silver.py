@@ -38,9 +38,9 @@ from typing import TYPE_CHECKING
 from corex_eval.config import (
     ANNOTATION_VARIABLES,
     CASE_ID_COL,
-    SILVER_EDU_PATH,
-    SILVER_PATH,
     SPELL_INDEX_COL,
+    _silver_path,
+    _silver_edu_path,
 )
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ def load_silver(path: str | Path | None = None) -> "pd.DataFrame":
     """
     import pandas as pd
 
-    resolved = Path(path) if path else SILVER_PATH
+    resolved = Path(path) if path else _silver_path()
     _assert_exists(resolved)
 
     df = pd.read_csv(resolved, dtype=str, keep_default_na=False)
@@ -81,8 +81,8 @@ def load_silver(path: str | Path | None = None) -> "pd.DataFrame":
     # corex_silver_edu.csv exists.  The two files use different label columns
     # (job_description_label / workplace_label vs degree_label / subject_label),
     # so get_silver_inputs() can distinguish them by which column is populated.
-    if path is None and SILVER_EDU_PATH.exists():
-        edu_df = pd.read_csv(SILVER_EDU_PATH, dtype=str, keep_default_na=False)
+    if path is None and _silver_edu_path().exists():
+        edu_df = pd.read_csv(_silver_edu_path(), dtype=str, keep_default_na=False)
         df = pd.concat([df, edu_df], ignore_index=True).fillna("")
 
     df = _drop_missing_case_ids(df)

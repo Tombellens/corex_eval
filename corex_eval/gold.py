@@ -25,9 +25,9 @@ from corex_eval.config import (
     ATOMIC_VARIABLES,
     CASE_ID_COL,
     COMPOSITE_VARIABLES,
-    GOLD_PATH,
     MISSING_COL,
     SPELL_INDEX_COL,
+    _gold_path,
 )
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ def load_gold(path: str | Path | None = None) -> "pd.DataFrame":
     """
     import pandas as pd
 
-    resolved = Path(path) if path else GOLD_PATH
+    resolved = Path(path) if path else _gold_path()
     _assert_exists(resolved)
 
     df = pd.read_csv(resolved, dtype=str, keep_default_na=False, sep=";", encoding="utf-8-sig")

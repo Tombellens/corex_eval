@@ -21,11 +21,22 @@ from pathlib import Path
 # Contributors set COREX_DATA_DIR to wherever they store the data locally.
 # The data folder is gitignored and never pushed to the repo.
 # Example: export COREX_DATA_DIR=/home/tom/corex_data
-_DATA_DIR = Path(os.environ.get("COREX_DATA_DIR", "data"))
+#
+# Paths are resolved lazily at call time (not at import time) so that
+# load_dotenv() or os.environ assignments made after import are respected.
 
-GOLD_PATH       = _DATA_DIR / "gold"   / "corex_gold.csv"
-SILVER_PATH     = _DATA_DIR / "silver" / "corex_silver.csv"
-SILVER_EDU_PATH = _DATA_DIR / "silver" / "corex_silver_edu.csv"
+def _data_dir() -> Path:
+    """Return the data root, reading COREX_DATA_DIR from the environment now."""
+    return Path(os.environ.get("COREX_DATA_DIR", "data"))
+
+def _gold_path() -> Path:
+    return _data_dir() / "gold" / "corex_gold.csv"
+
+def _silver_path() -> Path:
+    return _data_dir() / "silver" / "corex_silver.csv"
+
+def _silver_edu_path() -> Path:
+    return _data_dir() / "silver" / "corex_silver_edu.csv"
 
 RESULTS_PATH = Path("results") / "register.csv"
 
