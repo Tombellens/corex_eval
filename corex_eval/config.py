@@ -143,6 +143,56 @@ SPELL_INDEX_COL = "spell_index"
 
 
 # ---------------------------------------------------------------------------
+# Career position — broad sector mapping
+# ---------------------------------------------------------------------------
+
+# Maps first digit of a career_position code → broad sector label.
+# Used by career_position_to_sector() and granularity="broad" in evaluate().
+CAREER_POSITION_SECTORS: dict[str, str] = {
+    "1": "Executive triangle (central government)",
+    "2": "Public administration (domestic)",
+    "3": "Public sector organisations",
+    "4": "Politics / political office",
+    "5": "Judiciary & oversight",
+    "6": "Private and third sector",
+    "7": "International organisations",
+    "8": "Other",
+    "9": "Missing / other",
+}
+
+
+def career_position_to_sector(code: str) -> str:
+    """
+    Collapse a career_position code string to its broad sector (first digit).
+
+    Works on full code strings ("105 = Minister with portfolio") as well as
+    plain numeric strings ("105" or already-collapsed "1").
+
+    Parameters
+    ----------
+    code : career_position value, e.g. "105 = Minister with portfolio"
+
+    Returns
+    -------
+    First digit as a string, e.g. "1". Returns the original string unchanged
+    if the numeric part cannot be parsed.
+
+    Examples
+    --------
+    >>> career_position_to_sector("105 = Minister with portfolio")
+    '1'
+    >>> career_position_to_sector("301 = Finance, central bank...")
+    '3'
+    >>> career_position_to_sector("999 = Missing")
+    '9'
+    """
+    numeric = code.split("=")[0].strip()
+    if numeric.isdigit() and len(numeric) > 0:
+        return numeric[0]
+    return code  # fallback for unexpected formats
+
+
+# ---------------------------------------------------------------------------
 # Temporal matching tolerance
 # ---------------------------------------------------------------------------
 

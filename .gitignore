@@ -18,6 +18,7 @@ data/
 *.bin
 *.safetensors
 models/
+**/checkpoints/
 
 # Jupyter
 .ipynb_checkpoints/

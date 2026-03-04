@@ -48,6 +48,7 @@ from corex_eval.config import (
     COMPOSITE_VARIABLES,
     EXTRACTION_VARIABLES,
     SPELL_INDEX_COL,
+    career_position_to_sector,
 )
 
 if TYPE_CHECKING:
@@ -71,6 +72,7 @@ def evaluate(
     semantic_similarity: bool = False,
     embedding_model: str = "all-MiniLM-L6-v2",
     tolerance_years: int | None = None,
+    granularity: str = "fine",
 ) -> dict:
     """
     Evaluate model predictions against the gold standard test set.
@@ -118,6 +120,16 @@ def evaluate(
                       extraction. Defaults to TEMPORAL_TOLERANCE_YEARS
                       from config.py.
 
+    granularity     : annotation / career_position only. Controls the level
+                      at which predictions are evaluated.
+                      "fine"  (default) — evaluate on full 3-digit codes
+                              (e.g. "105 = Minister with portfolio")
+                      "broad" — collapse both predictions and gold to the
+                              first digit before scoring
+                              (e.g. "1 = Executive triangle"). Useful for
+                              measuring broad-sector accuracy when fine-grained
+                              codes are too specific.
+
     Returns
     -------
     Results dict with structure depending on task:
@@ -134,6 +146,7 @@ def evaluate(
     _validate_task(task)
     _validate_variable(task, variable)
     _validate_predictions_df(predictions_df)
+    _validate_granularity(granularity, task, variable)
 
     if submit and not experiment_path:
         raise ValueError(
@@ -165,6 +178,7 @@ def evaluate(
             predictions_df, test_df, silver_df,
             variable, gold_case_ids,
             semantic_similarity, embedding_model,
+            granularity,
         )
 
     # --- Add task metadata ---
@@ -377,6 +391,7 @@ def _evaluate_annotation(
     gold_case_ids: "set[str]",
     semantic_similarity: bool,
     embedding_model: str,
+    granularity: str = "fine",
 ) -> dict:
     """
     Align predictions to gold annotation codes and compute classification metrics.
@@ -458,6 +473,11 @@ def _evaluate_annotation(
             f"{'...' if len(missing_preds) > 10 else ''}"
         )
 
+    # Collapse to broad sector if requested
+    if granularity == "broad":
+        aligned_pred = [career_position_to_sector(c) for c in aligned_pred]
+        aligned_gold = [career_position_to_sector(c) for c in aligned_gold]
+
     results = annotation_metrics(
         aligned_pred,
         aligned_gold,
@@ -467,6 +487,7 @@ def _evaluate_annotation(
 
     results["n_evaluated"] = results.pop("n_total")
     results["n_skipped"]   = len(missing_preds)
+    results["granularity"] = granularity
     return results
 
 
@@ -564,6 +585,18 @@ def _validate_variable(task: str, variable: str | None) -> None:
         raise ValueError(
             f"Unknown annotation variable '{variable}'. "
             f"Valid options: {sorted(ANNOTATION_VARIABLES)}"
+        )
+
+
+def _validate_granularity(granularity: str, task: str, variable: str | None) -> None:
+    if granularity not in ("fine", "broad"):
+        raise ValueError(
+            f"granularity must be 'fine' or 'broad', got '{granularity}'."
+        )
+    if granularity == "broad" and (task != "annotation" or variable != "career_position"):
+        raise ValueError(
+            "granularity='broad' is only supported for "
+            "task='annotation', variable='career_position'."
         )
 
 
