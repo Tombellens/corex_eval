@@ -158,6 +158,6 @@ TEMPORAL_TOLERANCE_YEARS = 1
 GITHUB_TOKEN_ENV_VAR = "GITHUB_TOKEN"
 
 # These should match your actual GitHub repo once it exists
-GITHUB_REPO_OWNER = "your-github-username"   # update before first use
+GITHUB_REPO_OWNER = "Tombellens"   # update before first use
 GITHUB_REPO_NAME  = "corex_eval"
 GITHUB_RESULTS_FILE_PATH = "results/register.csv"
