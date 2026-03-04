@@ -46,6 +46,7 @@ from corex_eval.config import (
     CASE_ID_COL,
     COLLECTION_TARGET_COL,
     COMPOSITE_VARIABLES,
+    COUNTRY_COL,
     EXTRACTION_VARIABLES,
     SPELL_INDEX_COL,
     career_position_to_sector,
@@ -436,10 +437,17 @@ def _evaluate_annotation(
             for _, row in test_df.iterrows()
         }
 
+    # Build case_id → country mapping from the test split
+    country_map: dict[str, str] = {
+        str(row[CASE_ID_COL]): str(row.get(COUNTRY_COL, "unknown")).strip()
+        for _, row in test_df.iterrows()
+    }
+
     # Align predictions to gold
-    aligned_pred = []
-    aligned_gold = []
-    missing_preds = []
+    aligned_pred    = []
+    aligned_gold    = []
+    aligned_country = []
+    missing_preds   = []
 
     for _, row in predictions_df.iterrows():
         case_id = str(row[CASE_ID_COL])
@@ -464,6 +472,7 @@ def _evaluate_annotation(
 
         aligned_pred.append(pred_code)
         aligned_gold.append(gold_code)
+        aligned_country.append(country_map.get(case_id, "unknown"))
 
     if missing_preds:
         warnings.warn(
@@ -488,6 +497,24 @@ def _evaluate_annotation(
     results["n_evaluated"] = results.pop("n_total")
     results["n_skipped"]   = len(missing_preds)
     results["granularity"] = granularity
+
+    # Per-country breakdown
+    from collections import defaultdict
+    country_groups: dict[str, dict] = defaultdict(lambda: {"pred": [], "gold": []})
+    for pred, gold, country in zip(aligned_pred, aligned_gold, aligned_country):
+        country_groups[country]["pred"].append(pred)
+        country_groups[country]["gold"].append(gold)
+
+    per_country = {}
+    for country, data in sorted(country_groups.items()):
+        cm = annotation_metrics(data["pred"], data["gold"], semantic_similarity=False)
+        per_country[country] = {
+            "accuracy":    cm["accuracy"],
+            "macro_f1":    cm["macro_f1"],
+            "weighted_f1": cm["weighted_f1"],
+            "n_evaluated": cm["n_total"],
+        }
+    results["per_country"] = per_country
     return results
 
 
@@ -528,6 +555,11 @@ def _print_summary(results: dict, task: str, variable: str | None) -> None:
         print(f"  Weighted F1  : {results.get('weighted_f1', '?')}")
         if results.get("semantic_similarity") is not None:
             print(f"  Semantic sim : {results['semantic_similarity']:.4f}")
+        per_country = results.get("per_country", {})
+        if per_country:
+            print(f"\n  Per-country accuracy:")
+            for country, m in sorted(per_country.items()):
+                print(f"    {country:<30} {m['accuracy']:.4f}  (n={m['n_evaluated']})")
 
     print(f"{'─' * 50}\n")
 
