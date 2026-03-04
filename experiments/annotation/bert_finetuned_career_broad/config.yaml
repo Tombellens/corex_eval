@@ -1,0 +1,10 @@
+task: annotation
+variable: career_position
+model: bert-base-multilingual-cased
+contributor: tom
+description: Fine-tuned multilingual BERT (mmBERT) for career_position annotation — broad sector labels (first digit)
+notes: >
+  Text input: job_description_label (128 tokens).
+  5 epochs, lr=2e-5, batch_size=32, weight_decay=0.01.
+  Labels collapsed to broad sector (first digit) using career_position_to_sector().
+  Evaluated with granularity="broad".
