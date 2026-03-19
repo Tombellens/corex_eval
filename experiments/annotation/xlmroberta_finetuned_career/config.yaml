@@ -1,0 +1,10 @@
+task: annotation
+variable: career_position
+model: xlm-roberta-base
+contributor: tom
+description: Fine-tuned XLM-RoBERTa (base) for career_position annotation — fine-grained labels
+notes: >
+  Text input: job_description_label (128 tokens).
+  5 epochs, lr=2e-5, batch_size=32, weight_decay=0.01.
+  XLM-RoBERTa trained on 100 languages via MLM on CommonCrawl — expected to
+  outperform mBERT on multilingual inputs.

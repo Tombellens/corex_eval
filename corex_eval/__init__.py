@@ -12,58 +12,81 @@ political career data pipelines across three tasks:
 
 Quickstart
 ----------
+    from dotenv import load_dotenv
+    load_dotenv()   # loads COREX_DATA_DIR and GITHUB_TOKEN from .env
+
     from corex_eval import load_inputs, evaluate, load_training_data
 
-    # --- Extraction example ---
+    # --- Annotation example ---
 
-    # 1. Get test set inputs (case_id + cv_local text)
-    inputs = load_inputs(task="extraction")
+    # 1. Get test set inputs
+    inputs = load_inputs(task="annotation", variable="career_position")
+    # → DataFrame: [case_id, spell_index, job_description_label]
 
     # 2. Run your model on inputs → predictions_df
-    #    predictions_df must have columns: [case_id, birth_year]
+    #    predictions_df must have columns: [case_id, spell_index, predicted_code]
 
-    # 3. Evaluate
+    # 3. Evaluate (returns accuracy, macro_f1, per_class, per_country, ...)
     results = evaluate(
         predictions_df,
-        task="extraction",
-        variable="birth_year",
+        task="annotation",
+        variable="career_position",
     )
 
-    # 4. Submit to shared leaderboard (requires GITHUB_TOKEN env var)
+    # 4. Evaluate at broad sector level (first digit only)
     results = evaluate(
         predictions_df,
-        task="extraction",
-        variable="birth_year",
+        task="annotation",
+        variable="career_position",
+        granularity="broad",
+    )
+
+    # 5. Submit to shared leaderboard (requires GITHUB_TOKEN in .env)
+    results = evaluate(
+        predictions_df,
+        task="annotation",
+        variable="career_position",
         submit=True,
-        experiment_path="experiments/extraction/gpt4o/config.yaml",
+        experiment_path="experiments/annotation/bert_finetuned_career/config.yaml",
     )
 
     # --- Load training data ---
     train = load_training_data(
-        task="extraction",
-        features=["cv_local", "birth_year", "sex", "edu_degree"],
+        task="annotation",
+        variable="career_position",
+        features=["job_description_label", "career_position"],
     )
+    # → DataFrame: [case_id, spell_index, job_description_label, career_position]
+
+    # --- Collapse fine-grained codes to broad sectors for training ---
+    from corex_eval import career_position_to_sector
+    train["career_position"] = train["career_position"].map(career_position_to_sector)
+    # "105 = Minister with portfolio" → "1"
 
 Setup
 -----
 1. Clone the repository and install:
        pip install -e ".[dev]"
 
-2. Point the library at your local data:
-       export COREX_DATA_DIR=/path/to/your/data/folder
+   Optional extras:
+       pip install -e ".[dev,embeddings]"   # semantic similarity
+       pip install -e ".[dev,bert]"         # BERT fine-tuning experiments
 
-   Expected structure:
+2. Create a .env file in the project root (gitignored):
+       COREX_DATA_DIR=/path/to/your/data
+       GITHUB_TOKEN=ghp_your_token_here
+
+   Expected data structure:
        $COREX_DATA_DIR/
        ├── gold/
        │   └── corex_gold.csv
        └── silver/
-           └── corex_silver.csv   (once built)
+           ├── corex_silver.csv        (career rows, once built)
+           └── corex_silver_edu.csv    (education rows, once built)
 
-3. For submit=True, set your GitHub token:
-       export GITHUB_TOKEN=ghp_your_token_here
-
-4. For semantic similarity in annotation evaluation:
-       pip install corex_eval[embeddings]
+3. In notebooks, load .env before importing corex_eval:
+       from dotenv import load_dotenv
+       load_dotenv()
 
 Tasks and variables
 -------------------
@@ -82,9 +105,12 @@ Tasks and variables
                                  "position": str}, ...]
 
     annotation
-        Variables: career_position, edu_degree, uni_subject
+        Variables: career_position, uni_subject
         predictions_df columns: [case_id, spell_index, predicted_code]
-        (spell_index not required for edu_degree)
+
+        career_position supports granularity="broad" to evaluate at the
+        broad sector level (first digit) instead of fine-grained 3-digit codes.
+        Results always include per_class and per_country breakdowns.
 """
 
 from corex_eval.inputs import load_inputs, load_training_data

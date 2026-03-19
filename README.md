@@ -18,53 +18,73 @@ cd corex_eval
 pip install -e ".[dev]"
 ```
 
-For annotation semantic similarity (optional, requires GPU recommended):
+Optional extras:
 
 ```bash
-pip install -e ".[dev,embeddings]"
+pip install -e ".[dev,embeddings]"   # semantic similarity in annotation evaluation
+pip install -e ".[dev,bert]"         # BERT fine-tuning experiments
 ```
 
 ### 2. Point the library at your data
 
 The gold and silver CSV files are **not** committed to the repo.
-Set the `COREX_DATA_DIR` environment variable to wherever you store them locally:
+The recommended approach is a `.env` file in the project root (already in `.gitignore`):
+
+```bash
+# .env
+COREX_DATA_DIR=/path/to/your/data
+GITHUB_TOKEN=ghp_your_token_here
+```
+
+Then load it at the top of your notebook or script:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+Alternatively, export the variable in your shell:
 
 ```bash
 export COREX_DATA_DIR=/path/to/your/data
 ```
 
-Expected structure:
+Expected data structure:
 
 ```
 $COREX_DATA_DIR/
 ├── gold/
 │   └── corex_gold.csv
 └── silver/
-    └── corex_silver.csv    # once built
+    ├── corex_silver.csv        # career spell rows (once built)
+    └── corex_silver_edu.csv    # education rows (once built)
 ```
 
-Add the export to your `.bashrc` or `.zshrc` so it persists across sessions.
-
 ### 3. Set your GitHub token (for result submission)
+
+Add `GITHUB_TOKEN` to your `.env` file (see above), or export it in your shell:
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
 ```
 
 Generate a token at <https://github.com/settings/tokens> with `repo` scope.
+Each contributor uses their own token.
 
 ---
 
 ## Quickstart
 
 ```python
+from dotenv import load_dotenv
+load_dotenv()
+
 from corex_eval import load_inputs, evaluate, load_training_data
 ```
 
 ### Collection
 
 ```python
-# Get test inputs
 inputs = load_inputs(task="collection")
 # → DataFrame: [case_id, name_first, name_last, job_title, country_label]
 
@@ -111,15 +131,49 @@ results = evaluate(
     variable="career_position",
     semantic_similarity=True,   # optional, requires [embeddings]
 )
+# results includes: accuracy, macro_f1, weighted_f1,
+#                   per_class breakdown, per_country breakdown
+```
+
+#### Broad sector evaluation
+
+Evaluate at the first-digit level (e.g. `1` = Executive triangle) instead of
+fine-grained 3-digit codes:
+
+```python
+results = evaluate(
+    predictions_df,
+    task="annotation",
+    variable="career_position",
+    granularity="broad",
+)
+```
+
+Use `career_position_to_sector()` to collapse labels when training on broad sectors:
+
+```python
+from corex_eval import career_position_to_sector
+
+train_df["career_position"] = train_df["career_position"].map(career_position_to_sector)
+# "105 = Minister with portfolio" → "1"
 ```
 
 ### Load training data
 
 ```python
+# Extraction
 train = load_training_data(
     task="extraction",
-    features=["cv_local", "birth_year", "sex", "edu_degree"],
+    features=["cv_local", "birth_year", "sex"],
 )
+
+# Annotation
+train = load_training_data(
+    task="annotation",
+    variable="career_position",
+    features=["job_description_label", "career_position"],
+)
+# → DataFrame: [case_id, spell_index, job_description_label, career_position]
 ```
 
 ### Submit results to the shared leaderboard
@@ -129,10 +183,10 @@ Add `submit=True` and point to your experiment config:
 ```python
 results = evaluate(
     predictions_df,
-    task="extraction",
-    variable="birth_year",
+    task="annotation",
+    variable="career_position",
     submit=True,
-    experiment_path="experiments/extraction/gpt4o/config.yaml",
+    experiment_path="experiments/annotation/bert_finetuned_career/config.yaml",
 )
 ```
 
@@ -150,36 +204,38 @@ results = evaluate(
 | `extraction` | `edu_end` | int | MAE + accuracy |
 | `extraction` | `edu_degree` | str | Accuracy |
 | `extraction` | `career` | composite | Precision / Recall / F1 |
-| `annotation` | `career_position` | classification | Accuracy / F1 |
-| `annotation` | `edu_degree` | classification | Accuracy / F1 |
-| `annotation` | `uni_subject` | classification | Accuracy / F1 |
+| `annotation` | `career_position` | classification | Accuracy / F1 / per-country |
+| `annotation` | `uni_subject` | classification | Accuracy / F1 / per-country |
 
 ---
 
 ## Experiment structure
 
-Each experiment lives in its own folder under `experiments/`:
+Each experiment lives in its own folder under `experiments/` and consists of
+a `config.yaml` for metadata and a `notebook.ipynb` to run the experiment:
 
 ```
 experiments/
 ├── collection/
 ├── extraction/
-│   └── gpt4o/
-│       └── config.yaml
 └── annotation/
-    └── encoders/
-        └── mmBERT_finetuned_career/
-            └── config.yaml
+    ├── bert_finetuned_career/
+    │   ├── config.yaml
+    │   └── notebook.ipynb
+    └── bert_finetuned_career_broad/
+        ├── config.yaml
+        └── notebook.ipynb
 ```
 
 Minimal `config.yaml`:
 
 ```yaml
-task: extraction
-model: gpt-4o
+task: annotation
+variable: career_position
+model: bert-base-multilingual-cased
 contributor: tom
-description: Zero-shot birth year extraction from cv_local
-notes: Baseline, no few-shot examples
+description: Fine-tuned mmBERT for career_position annotation
+notes: 5 epochs, lr=2e-5, batch_size=32
 ```
 
 ---
@@ -187,5 +243,5 @@ notes: Baseline, no few-shot examples
 ## Running tests
 
 ```bash
-pytest tests/ -v
+python3 -m pytest tests/ -v
 ```
