@@ -164,10 +164,10 @@ CAREER_POSITION_SECTORS: dict[str, str] = {
 # to help the model distinguish between similar-sounding categories.
 # Update these descriptions to reflect the codebook boundaries more precisely.
 CAREER_POSITION_SECTOR_HINTS: dict[str, str] = {
-    "1": "ministers, heads of government/state, and their direct political staff",
-    "2": "civil servants and officials within government ministries, below minister level",
+    "1": "ministers, heads of government/state, chiefs of staff, highest, top-level bureaucrats",
+    "2": "civil servants and officials within government ministries",
     "3": "employees of state agencies, public companies, universities, hospitals, regulatory bodies",
-    "4": "elected politicians, party officials, parliamentary roles",
+    "4": "elected politicians, party officials, parliamentary roles, ministerial advisers, ..",
     "5": "judges, prosecutors, audit institutions, ombudsmen",
     "6": "private companies, NGOs, foundations, self-employed",
     "7": "EU institutions, UN bodies, NATO, diplomatic roles abroad",
