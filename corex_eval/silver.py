@@ -156,6 +156,10 @@ def get_silver_inputs(
     if has_spells and SPELL_INDEX_COL in df_var.columns:
         cols = [CASE_ID_COL, SPELL_INDEX_COL, input_col]
 
+    # Include workplace_label when present (career spell rows)
+    if "workplace_label" in df_var.columns and "workplace_label" not in cols:
+        cols.append("workplace_label")
+
     # Include the gold code column when it is stored inline in the silver rows
     # (e.g. uni_subject), so callers can use it for evaluation alignment.
     if gold_stored_in_silver and gold_col not in cols:
