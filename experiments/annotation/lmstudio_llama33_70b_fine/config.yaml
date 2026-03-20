@@ -1,0 +1,6 @@
+task: annotation
+variable: career_position
+model: Llama-3.3-70B-Instruct
+contributor: tom
+description: Zero-shot career_position annotation via Llama 3.3 70B Instruct Q4 (LM Studio) — fine-grained codes
+notes: Zero-shot prompting via LM Studio OpenAI-compatible API. Input is job title and workplace label. Fine-grained codes listed in system prompt.
