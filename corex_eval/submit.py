@@ -123,19 +123,23 @@ def _build_row(
     # Top-level summary metrics — pulled out for easy filtering in the CSV
     summary = _extract_summary_metrics(results, task)
 
+    def _clean(value: Any) -> str:
+        """Strip newlines and leading/trailing whitespace from string values."""
+        return str(value).replace("\n", " ").replace("\r", " ").strip()
+
     return {
         # --- Identity ---
         "timestamp":       datetime.now(tz=timezone.utc).isoformat(),
-        "contributor":     config.get("contributor", "unknown"),
-        "experiment_path": str(experiment_path),
+        "contributor":     _clean(config.get("contributor", "unknown")),
+        "experiment_path": _clean(experiment_path),
 
         # --- Task ---
         "task":     task,
         "variable": variable,
 
         # --- Model ---
-        "model":       config.get("model", "unknown"),
-        "model_notes": config.get("notes", ""),
+        "model":       _clean(config.get("model", "unknown")),
+        "model_notes": _clean(config.get("notes", "")),
 
         # --- Summary metrics (flat, for quick comparison) ---
         **summary,
