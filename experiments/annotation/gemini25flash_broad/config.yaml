@@ -1,0 +1,11 @@
+task: annotation
+variable: career_position
+model: gemini-2.5-flash
+contributor: tom
+description: >
+  Gemini 2.5 Flash (Google) — zero/few-shot prompting for career_position annotation
+  (broad sector codes).
+notes: >
+  N_SHOTS=0 (zero-shot) by default; set to 3 or 5 for few-shot.
+  Standardised prompt template; temperature=0; max_tokens=64.
+  Google Gemini via OpenAI-compatible endpoint (requires GEMINI_API_KEY).

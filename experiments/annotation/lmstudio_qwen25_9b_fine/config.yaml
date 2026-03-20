@@ -1,0 +1,11 @@
+task: annotation
+variable: career_position
+model: qwen2.5-9b-instruct
+contributor: tom
+description: >
+  Qwen 2.5 9B (LM Studio) — zero/few-shot prompting for career_position annotation
+  (fine-grained codes).
+notes: >
+  N_SHOTS=0 (zero-shot) by default; set to 3 or 5 for few-shot.
+  Standardised prompt template; temperature=0; max_tokens=64.
+  LM Studio OpenAI-compatible API at localhost:1234.

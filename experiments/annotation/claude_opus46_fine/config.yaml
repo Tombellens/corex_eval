@@ -1,0 +1,11 @@
+task: annotation
+variable: career_position
+model: claude-opus-4-6
+contributor: tom
+description: >
+  Claude Opus 4.6 (Anthropic) — zero/few-shot prompting for career_position annotation
+  (fine-grained codes).
+notes: >
+  N_SHOTS=0 (zero-shot) by default; set to 3 or 5 for few-shot.
+  Standardised prompt template; temperature=0; max_tokens=64.
+  Anthropic API via anthropic SDK (requires ANTHROPIC_API_KEY).
