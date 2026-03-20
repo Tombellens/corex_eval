@@ -115,13 +115,15 @@ Tasks and variables
 
 from corex_eval.inputs import load_inputs, load_training_data
 from corex_eval.evaluate import evaluate
-from corex_eval.config import career_position_to_sector
+from corex_eval.config import career_position_to_sector, CAREER_POSITION_SECTORS, CAREER_POSITION_SECTOR_HINTS
 
 __all__ = [
     "load_inputs",
     "load_training_data",
     "evaluate",
     "career_position_to_sector",
+    "CAREER_POSITION_SECTORS",
+    "CAREER_POSITION_SECTOR_HINTS",
 ]
 
 __version__ = "0.1.0"

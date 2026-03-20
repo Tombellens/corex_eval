@@ -160,6 +160,21 @@ CAREER_POSITION_SECTORS: dict[str, str] = {
     "9": "Missing / other",
 }
 
+# One-line clarifications for each broad sector, used in LLM system prompts
+# to help the model distinguish between similar-sounding categories.
+# Update these descriptions to reflect the codebook boundaries more precisely.
+CAREER_POSITION_SECTOR_HINTS: dict[str, str] = {
+    "1": "ministers, heads of government/state, and their direct political staff",
+    "2": "civil servants and officials within government ministries, below minister level",
+    "3": "employees of state agencies, public companies, universities, hospitals, regulatory bodies",
+    "4": "elected politicians, party officials, parliamentary roles",
+    "5": "judges, prosecutors, audit institutions, ombudsmen",
+    "6": "private companies, NGOs, foundations, self-employed",
+    "7": "EU institutions, UN bodies, NATO, diplomatic roles abroad",
+    "8": "roles not fitting any of the above categories",
+    "9": "insufficient information to classify",
+}
+
 
 def career_position_to_sector(code: str) -> str:
     """
