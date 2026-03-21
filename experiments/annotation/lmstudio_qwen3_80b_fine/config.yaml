@@ -1,6 +1,6 @@
 task: annotation
 variable: career_position
-model: Qwen2.5-72B-Instruct
+model: qwen/qwen3-next-80b
 contributor: tom
-description: Zero-shot career_position annotation via Qwen 2.5 72B Instruct (LM Studio) — fine-grained codes
+description: Zero-shot career_position annotation via Qwen3 80B (LM Studio) — fine-grained codes
 notes: Zero-shot prompting via LM Studio OpenAI-compatible API. Input is job title and workplace label. Fine-grained codes listed in system prompt.
