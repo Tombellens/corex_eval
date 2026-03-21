@@ -1,0 +1,6 @@
+task: annotation
+variable: career_position
+model: gpt-5.3-chat-latest
+contributor: tom
+description: Zero-shot career_position annotation via GPT-5.3 Chat — broad sector codes
+notes: Zero-shot prompting via OpenAI API. Input is job title and workplace label. Broad sector codes with clarifying hints in system prompt.
