@@ -1,0 +1,6 @@
+task: annotation
+variable: career_position
+model: TBD
+contributor: tom
+description: RAG (web search) career_position annotation — fine-grained codes. Google Custom Search enriches each entry before classification.
+notes: For each career entry, top-3 Google search results for workplace and job title are synthesised into context descriptions by the LLM, then fed into the classification prompt. Search results cached to disk. Model TBD pending benchmark results.

@@ -1,0 +1,6 @@
+task: annotation
+variable: career_position
+model: TBD
+contributor: tom
+description: RAG (embedding search) career_position annotation — broad sector codes. Top-5 country-matched training examples retrieved via LM Studio embeddings.
+notes: Training set embeddings pre-computed via LM Studio local embedding model. For each test entry, top-5 most similar entries from the same country are retrieved and shown as labelled examples in the prompt. No cross-country fallback. Model TBD pending benchmark results.

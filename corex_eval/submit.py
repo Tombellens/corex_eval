@@ -124,8 +124,9 @@ def _build_row(
     summary = _extract_summary_metrics(results, task)
 
     def _clean(value: Any) -> str:
-        """Strip newlines and leading/trailing whitespace from string values."""
-        return str(value).replace("\n", " ").replace("\r", " ").strip()
+        """Strip all line-breaking characters from string values."""
+        import re
+        return re.sub(r"[\n\r\u2028\u2029\v\f]", " ", str(value)).strip()
 
     return {
         # --- Identity ---
