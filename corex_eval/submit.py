@@ -226,22 +226,16 @@ _REGISTER_COLUMNS = [
 
 def _row_to_csv_line(row: dict[str, Any]) -> str:
     """Serialise a row dict to a single CSV line string (no newline)."""
-
-    def _sanitize(v: Any) -> Any:
-        """Strip embedded newlines from string values so the row stays on one line."""
-        if isinstance(v, str):
-            return v.replace("\n", " ").replace("\r", " ").strip()
-        return v
-
     buf = io.StringIO()
     writer = csv.DictWriter(
         buf,
         fieldnames=_REGISTER_COLUMNS,
-        extrasaction="ignore",   # ignore any keys not in _REGISTER_COLUMNS
-        lineterminator="\n",     # non-empty so csv quotes fields containing \n
+        extrasaction="ignore",
+        lineterminator="\n",
+        quoting=csv.QUOTE_ALL,   # quote every field — newlines in values can never split a row
     )
-    # Fill missing columns with empty string, sanitizing all string values
-    full_row = {col: _sanitize(row.get(col, "")) for col in _REGISTER_COLUMNS}
+    # _clean() already strips line-breaking characters; QUOTE_ALL is a second line of defence
+    full_row = {col: _clean(row.get(col, "")) for col in _REGISTER_COLUMNS}
     writer.writerow(full_row)
     return buf.getvalue().rstrip("\n")
 
