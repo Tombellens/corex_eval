@@ -2,6 +2,7 @@ task: annotation
 variable: uni_subject
 model: qwen/qwen3-next-80b
 contributor: tom
-description: Zero-shot Qwen3 80B via LM Studio for uni_subject annotation.
+description: >
+  Zero-shot Qwen3 80B via LM Studio for uni_subject annotation.
 notes: >
   Zero-shot prompting via LM Studio OpenAI-compatible API. Input is subject description.

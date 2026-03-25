@@ -2,6 +2,7 @@ task: annotation
 variable: uni_subject
 model: gpt-5.3-chat-latest
 contributor: tom
-description: Zero-shot GPT-5.3 for uni_subject annotation via OpenAI API.
+description: >
+  Zero-shot GPT-5.3 for uni_subject annotation via OpenAI API.
 notes: >
   Zero-shot prompting via OpenAI API. Input is subject description. Temperature=0.

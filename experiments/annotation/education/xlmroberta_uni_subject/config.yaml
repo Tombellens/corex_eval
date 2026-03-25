@@ -2,7 +2,8 @@ task: annotation
 variable: uni_subject
 model: xlm-roberta-base
 contributor: tom
-description: Fine-tuned XLM-RoBERTa (base) for uni_subject annotation.
+description: >
+  Fine-tuned XLM-RoBERTa (base) for uni_subject annotation.
   Text input: subject_label. 5 epochs, lr=2e-5, batch_size=32.
 notes: >
   Text input: subject_label (128 tokens). 5 epochs, lr=2e-5, batch_size=32.
