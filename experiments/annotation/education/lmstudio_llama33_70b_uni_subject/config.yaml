@@ -2,6 +2,7 @@ task: annotation
 variable: uni_subject
 model: meta/llama-3.3-70b
 contributor: tom
-description: Zero-shot Llama 3.3 70B Instruct (Q4) via LM Studio for uni_subject annotation.
+description: >
+  Zero-shot Llama 3.3 70B Instruct (Q4) via LM Studio for uni_subject annotation.
 notes: >
   Zero-shot prompting via LM Studio OpenAI-compatible API. Input is subject description.

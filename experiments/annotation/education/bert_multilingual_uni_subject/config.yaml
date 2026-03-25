@@ -2,7 +2,8 @@ task: annotation
 variable: uni_subject
 model: bert-base-multilingual-cased
 contributor: tom
-description: Fine-tuned multilingual BERT (base, cased) for uni_subject annotation.
+description: >
+  Fine-tuned multilingual BERT (base, cased) for uni_subject annotation.
   Text input: subject_label. 5 epochs, lr=2e-5, batch_size=32.
 notes: >
   Text input: subject_label (128 tokens). 5 epochs, lr=2e-5, batch_size=32.
