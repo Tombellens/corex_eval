@@ -50,6 +50,7 @@ from corex_eval.config import (
     EXTRACTION_VARIABLES,
     SPELL_INDEX_COL,
     career_position_to_sector,
+    uni_subject_to_prefix,
 )
 
 if TYPE_CHECKING:
@@ -486,6 +487,13 @@ def _evaluate_annotation(
     if granularity == "broad":
         aligned_pred = [career_position_to_sector(c) for c in aligned_pred]
         aligned_gold = [career_position_to_sector(c) for c in aligned_gold]
+
+    # Normalise uni_subject codes to their numeric prefix so that bare
+    # numbers ("03") and full labels ("03 – Social sciences: Economics")
+    # compare as equal — mirrors the career broad-sector collapse above.
+    if variable == "uni_subject":
+        aligned_pred = [uni_subject_to_prefix(c) for c in aligned_pred]
+        aligned_gold = [uni_subject_to_prefix(c) for c in aligned_gold]
 
     results = annotation_metrics(
         aligned_pred,

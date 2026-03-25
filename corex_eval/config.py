@@ -176,6 +176,38 @@ CAREER_POSITION_SECTOR_HINTS: dict[str, str] = {
 }
 
 
+def uni_subject_to_prefix(code: str) -> str:
+    """
+    Normalise a uni_subject code string to its leading numeric prefix.
+
+    Works on full code strings ("03 – Social sciences: Economics") as well as
+    plain numeric strings ("03" or "3").
+
+    Parameters
+    ----------
+    code : uni_subject value, e.g. "03 – Social sciences: Economics"
+
+    Returns
+    -------
+    Leading digits as a string, e.g. "03". Returns the original string
+    unchanged if no numeric prefix can be found.
+
+    Examples
+    --------
+    >>> uni_subject_to_prefix("03 – Social sciences: Economics")
+    '03'
+    >>> uni_subject_to_prefix("10 – Natural sciences")
+    '10'
+    >>> uni_subject_to_prefix("03")
+    '03'
+    """
+    import re
+    m = re.match(r'^(\d+)', code.strip())
+    if m:
+        return m.group(1)
+    return code  # fallback for unexpected formats
+
+
 def career_position_to_sector(code: str) -> str:
     """
     Collapse a career_position code string to its broad sector (first digit).
