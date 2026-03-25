@@ -116,6 +116,7 @@ Tasks and variables
 from corex_eval.inputs import load_inputs, load_training_data
 from corex_eval.evaluate import evaluate
 from corex_eval.config import career_position_to_sector, CAREER_POSITION_SECTORS, CAREER_POSITION_SECTOR_HINTS
+from corex_eval.config import uni_subject_to_prefix
 
 __all__ = [
     "load_inputs",
@@ -124,6 +125,7 @@ __all__ = [
     "career_position_to_sector",
     "CAREER_POSITION_SECTORS",
     "CAREER_POSITION_SECTOR_HINTS",
+    "uni_subject_to_prefix",
 ]
 
 __version__ = "0.1.0"
