@@ -1,0 +1,7 @@
+task: annotation
+variable: uni_subject
+model: claude-opus-4-6
+contributor: tom
+description: Zero-shot Claude Opus 4.6 for uni_subject annotation via Anthropic API.
+notes: >
+  Zero-shot prompting via Anthropic API. Input is subject description. Temperature=0.
