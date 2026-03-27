@@ -17,8 +17,10 @@ data/
 *.pt
 *.bin
 *.safetensors
+*.npy
 models/
 **/checkpoints/
+**/cache/
 
 # Jupyter
 .ipynb_checkpoints/

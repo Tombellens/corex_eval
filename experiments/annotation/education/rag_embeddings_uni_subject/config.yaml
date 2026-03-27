@@ -1,0 +1,13 @@
+task: annotation
+variable: uni_subject
+model: claude-opus-4-6
+contributor: tom
+description: >
+  RAG (embedding search) for uni_subject annotation. For each test entry,
+  retrieves the top-5 most similar education entries from the training set
+  within the same country, uses them as labelled examples in the prompt,
+  then asks Claude Opus 4.6 to classify.
+notes: >
+  Embedding model: text-embedding-bge-m3 (LM Studio local).
+  Classification model: claude-opus-4-6.
+  Input: subject_label. Retrieval: top-5 same-country neighbours.
