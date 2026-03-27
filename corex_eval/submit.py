@@ -36,6 +36,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import re
+
 import yaml
 
 from corex_eval.config import (
@@ -123,11 +125,6 @@ def _build_row(
     # Top-level summary metrics — pulled out for easy filtering in the CSV
     summary = _extract_summary_metrics(results, task)
 
-    def _clean(value: Any) -> str:
-        """Strip all line-breaking characters from string values."""
-        import re
-        return re.sub(r"[\n\r\u2028\u2029\v\f]", " ", str(value)).strip()
-
     return {
         # --- Identity ---
         "timestamp":       datetime.now(tz=timezone.utc).isoformat(),
@@ -199,6 +196,11 @@ def _extract_summary_metrics(results: dict, task: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # CSV formatting
 # ---------------------------------------------------------------------------
+
+def _clean(value: Any) -> str:
+    """Strip all line-breaking characters from string values."""
+    return re.sub(r"[\n\r\u2028\u2029\v\f]", " ", str(value)).strip()
+
 
 # Fixed column order for the register — every row uses the same columns
 # so the CSV is always consistently shaped.
