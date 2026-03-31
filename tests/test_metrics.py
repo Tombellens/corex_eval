@@ -113,23 +113,30 @@ class TestAtomicAccuracy:
         r = atomic_accuracy(["Paris", "Rome"], ["Paris", "Berlin"])
         assert r["accuracy"] == pytest.approx(0.5)
 
-    def test_null_gold_is_skipped(self):
+    def test_null_gold_counts_as_valid_class(self):
+        # gold=None → NA class; pred="Paris" ≠ NA → wrong
+        # gold="Berlin", pred="Berlin" → correct
         from corex_eval.metrics.extraction import atomic_accuracy
         r = atomic_accuracy(["Paris", "Berlin"], [None, "Berlin"])
-        assert r["n_skipped"] == 1
-        assert r["n_total"]   == 1
-        assert r["accuracy"]  == pytest.approx(1.0)
+        assert r["n_skipped"] == 0
+        assert r["n_total"]   == 2
+        assert r["n_na_gold"] == 1
+        assert r["accuracy"]  == pytest.approx(0.5)
 
-    def test_all_null_gold_returns_none(self):
+    def test_na_na_counts_as_correct(self):
+        # Both gold and pred are NA → correct match
         from corex_eval.metrics.extraction import atomic_accuracy
-        r = atomic_accuracy(["Paris"], [None])
-        assert r["accuracy"] is None
+        r = atomic_accuracy([None], [None])
+        assert r["accuracy"]     == pytest.approx(1.0)
+        assert r["n_na_correct"] == 1
+        assert r["n_skipped"]    == 0
 
-    def test_sentinel_values_treated_as_empty(self):
+    def test_sentinel_values_treated_as_na(self):
+        # "99" is an NA sentinel — pred="99" when gold="99" is a correct NA match
         from corex_eval.metrics.extraction import atomic_accuracy
-        # "99" and "/" are sentinel values in the dataset meaning unknown
-        r = atomic_accuracy(["Paris"], ["99"])
-        assert r["n_skipped"] == 1
+        r = atomic_accuracy(["99"], ["99"])
+        assert r["accuracy"]     == pytest.approx(1.0)
+        assert r["n_na_correct"] == 1
 
     def test_mismatched_lengths_raise(self):
         from corex_eval.metrics.extraction import atomic_accuracy

@@ -25,8 +25,10 @@ All functions receive plain Python types — no pandas. The caller
 
 from __future__ import annotations
 
+import re
 import warnings
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 from corex_eval.config import TEMPORAL_TOLERANCE_YEARS
 
@@ -56,8 +58,29 @@ def atomic_accuracy(
     Exact-match accuracy for a single atomic string variable.
 
     Comparison is case-insensitive and strips leading/trailing whitespace.
-    Pairs where the gold value is None/empty are skipped (no gold to
-    compare against).
+    NA is treated as a valid class: if both gold and prediction are empty
+    (None, "", "nan", "<NA>", "99", "/"), that counts as a correct match.
+    This lets us measure whether LLMs and human coders agree on what
+    information is absent from the CV — not just on positive values.
+
+    No pairs are skipped: every (prediction, gold) pair contributes to
+    the denominator.
+
+    Two supplementary metrics are always computed:
+
+    accuracy_when_predicted
+        Accuracy restricted to cases where the model returned a non-NA
+        value. Rewards precision: if the model commits to an answer, how
+        often is it right? Useful because a model that abstains a lot can
+        look good on overall accuracy via NA=NA matches, while this metric
+        cuts through that.
+
+    char_similarity
+        Average character-level similarity (SequenceMatcher ratio, 0–1)
+        between prediction and gold, for pairs where neither is NA.
+        Handles near-misses like "L AQUILA (AQ)" vs "L'Aquila" that
+        fail exact match. Parenthetical content and punctuation are
+        stripped before comparison.
 
     Parameters
     ----------
@@ -67,10 +90,16 @@ def atomic_accuracy(
     Returns
     -------
     {
-        "accuracy":  float,   # fraction of correct predictions
-        "n_correct": int,
-        "n_total":   int,     # pairs where gold is non-null
-        "n_skipped": int,     # pairs where gold is null/empty
+        "accuracy":               float,  # exact-match (incl. NA=NA)
+        "accuracy_when_predicted": float,  # exact-match for non-NA preds only
+        "char_similarity":        float,  # avg char similarity, non-NA pairs
+        "n_correct":              int,
+        "n_total":                int,    # all pairs
+        "n_predicted":            int,    # pairs where pred is not NA
+        "n_skipped":              int,    # always 0 — kept for API compatibility
+        "n_na_correct":           int,    # NA=NA matches
+        "n_na_gold":              int,    # cases where gold is NA
+        "n_na_pred":              int,    # cases where prediction is NA
     }
     """
     if len(predictions) != len(gold):
@@ -79,25 +108,59 @@ def atomic_accuracy(
             f"(got {len(predictions)} vs {len(gold)})"
         )
 
-    n_correct = 0
-    n_total   = 0
-    n_skipped = 0
+    n_correct           = 0
+    n_na_correct        = 0
+    n_na_gold           = 0
+    n_na_pred           = 0
+    n_predicted_correct = 0
+    n_predicted         = 0
+    char_sims: list[float] = []
 
     for pred, g in zip(predictions, gold):
-        if _is_empty(g):
-            n_skipped += 1
-            continue
-        n_total += 1
-        if _normalise(pred) == _normalise(g):
-            n_correct += 1
+        g_norm    = _normalise(g)
+        pred_norm = _normalise(pred)
 
-    accuracy = n_correct / n_total if n_total > 0 else None
+        gold_na = (g_norm == _NA_SENTINEL)
+        pred_na = (pred_norm == _NA_SENTINEL)
+
+        if gold_na:
+            n_na_gold += 1
+        if pred_na:
+            n_na_pred += 1
+
+        correct = (g_norm == pred_norm)
+        if correct:
+            n_correct += 1
+            if gold_na:
+                n_na_correct += 1
+
+        # accuracy_when_predicted: denominator = non-NA predictions only
+        if not pred_na:
+            n_predicted += 1
+            if correct:
+                n_predicted_correct += 1
+
+        # char_similarity: only meaningful for non-NA pairs on both sides
+        if not pred_na and not gold_na:
+            char_sims.append(_char_similarity(str(pred), str(g)))
+
+    n_total = len(predictions)
+
+    accuracy               = n_correct / n_total if n_total > 0 else None
+    accuracy_when_pred     = n_predicted_correct / n_predicted if n_predicted > 0 else None
+    avg_char_sim           = sum(char_sims) / len(char_sims) if char_sims else None
 
     return {
-        "accuracy":  round(accuracy, 6) if accuracy is not None else None,
-        "n_correct": n_correct,
-        "n_total":   n_total,
-        "n_skipped": n_skipped,
+        "accuracy":                round(accuracy,           6) if accuracy           is not None else None,
+        "accuracy_when_predicted": round(accuracy_when_pred, 6) if accuracy_when_pred is not None else None,
+        "char_similarity":         round(avg_char_sim,       6) if avg_char_sim       is not None else None,
+        "n_correct":               n_correct,
+        "n_total":                 n_total,
+        "n_predicted":             n_predicted,
+        "n_skipped":               0,
+        "n_na_correct":            n_na_correct,
+        "n_na_gold":               n_na_gold,
+        "n_na_pred":               n_na_pred,
     }
 
 
@@ -340,16 +403,61 @@ def _years_compatible(
 # String normalisation helpers
 # ---------------------------------------------------------------------------
 
+# Canonical sentinel used to represent "not available" after normalisation.
+# All NA variants are mapped to this value so they compare equal regardless
+# of how the model or coder expressed missingness.
+_NA_SENTINEL = "__na__"
+
+# All raw values treated as "not available"
+_NA_VARIANTS = {"", "nan", "<na>", "/", "99", "none", "n/a", "na", "unknown"}
+
+
 def _normalise(value: str | None) -> str:
-    """Lowercase and strip for case-insensitive comparison."""
+    """
+    Lowercase, strip, and canonicalise NA variants to _NA_SENTINEL.
+
+    This ensures that None, '', 'nan', '<NA>', '99', 'N/A' etc. all
+    compare equal when checking gold == prediction.
+    """
     if value is None:
-        return ""
-    return str(value).strip().lower()
+        return _NA_SENTINEL
+    s = str(value).strip().lower()
+    return _NA_SENTINEL if s in _NA_VARIANTS else s
 
 
 def _is_empty(value) -> bool:
-    """Return True for None, empty string, 'nan', '<NA>', '/'."""
-    if value is None:
-        return True
-    s = str(value).strip()
-    return s in ("", "nan", "<NA>", "/", "99")
+    """Return True for None or any recognised NA variant."""
+    return _normalise(value) == _NA_SENTINEL
+
+
+def _normalise_for_chars(s: str) -> str:
+    """
+    Aggressively normalise a string before character-level comparison.
+
+    Steps:
+    - Lowercase
+    - Remove parenthetical content  e.g. "(AQ)" in "L'Aquila (AQ)"
+    - Remove punctuation / apostrophes that vary across sources
+    - Collapse whitespace
+    """
+    s = s.lower()
+    s = re.sub(r'\(.*?\)', '', s)          # remove parenthetical content
+    s = re.sub(r"['\-.,/\"']", '', s)      # remove common punctuation
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def _char_similarity(a: str, b: str) -> float:
+    """
+    Character-level similarity between two strings (0–1).
+
+    Uses difflib.SequenceMatcher after aggressive normalisation, so
+    "L AQUILA (AQ)" and "L'Aquila" score close to 1.0.
+    """
+    a_norm = _normalise_for_chars(a)
+    b_norm = _normalise_for_chars(b)
+    if not a_norm and not b_norm:
+        return 1.0
+    if not a_norm or not b_norm:
+        return 0.0
+    return SequenceMatcher(None, a_norm, b_norm).ratio()
