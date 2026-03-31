@@ -303,7 +303,26 @@ def _evaluate_atomic(
     if dtype == "int":
         results = atomic_mae(aligned_pred, aligned_gold)
     else:
+        from corex_eval.config import CHAR_SIMILARITY_VARIABLES, DEGREE_PREFIX_VARIABLES
+
+        # edu_degree: compare only the leading digit(s) to avoid format
+        # mismatches like "6 = Bachelor" vs "6. Bachelor" vs "6"
+        if variable in DEGREE_PREFIX_VARIABLES:
+            import re as _re
+            def _degree_prefix(v):
+                if v is None:
+                    return v
+                m = _re.match(r'^\s*(\d+)', str(v))
+                return m.group(1) if m else v
+            aligned_pred = [_degree_prefix(v) for v in aligned_pred]
+            aligned_gold = [_degree_prefix(v) for v in aligned_gold]
+
         results = atomic_accuracy(aligned_pred, aligned_gold)
+
+        # birth_place / birth_country: char_similarity is the headline metric
+        if variable in CHAR_SIMILARITY_VARIABLES:
+            results["accuracy"]               = results["char_similarity"]
+            results["accuracy_when_predicted"] = results["char_similarity_when_predicted"]
 
     results["n_evaluated"] = results.pop("n_total")
     results["n_skipped"]   = results.pop("n_skipped") + len(missing_preds)

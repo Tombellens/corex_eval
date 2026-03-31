@@ -118,6 +118,14 @@ COMPOSITE_VARIABLES: dict[str, tuple[str, str, str, int]] = {
 # All valid extraction variable names (for validation in evaluate())
 EXTRACTION_VARIABLES = set(ATOMIC_VARIABLES) | set(COMPOSITE_VARIABLES)
 
+# Variables where char_similarity replaces exact-match as the primary accuracy.
+# Free-text place names are too variable across sources for rigid exact match.
+CHAR_SIMILARITY_VARIABLES: set[str] = {"birth_place", "birth_country"}
+
+# Variables where only the leading digit(s) of the code are compared,
+# avoiding format mismatches like "6 = Bachelor" vs "6. Bachelor" vs "6".
+DEGREE_PREFIX_VARIABLES: set[str] = {"edu_degree"}
+
 
 # ---------------------------------------------------------------------------
 # Annotation task

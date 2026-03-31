@@ -114,7 +114,8 @@ def atomic_accuracy(
     n_na_pred           = 0
     n_predicted_correct = 0
     n_predicted         = 0
-    char_sims: list[float] = []
+    char_sims:           list[float] = []   # non-NA on both sides
+    char_sims_when_pred: list[float] = []   # non-NA prediction; 0.0 if gold is NA
 
     for pred, g in zip(predictions, gold):
         g_norm    = _normalise(g)
@@ -140,27 +141,38 @@ def atomic_accuracy(
             if correct:
                 n_predicted_correct += 1
 
-        # char_similarity: only meaningful for non-NA pairs on both sides
+        # char_similarity: only for non-NA on both sides
         if not pred_na and not gold_na:
-            char_sims.append(_char_similarity(str(pred), str(g)))
+            sim = _char_similarity(str(pred), str(g))
+            char_sims.append(sim)
+
+        # char_similarity_when_predicted: non-NA predictions;
+        # hallucinations (gold=NA, pred=value) score 0.0
+        if not pred_na:
+            if gold_na:
+                char_sims_when_pred.append(0.0)
+            else:
+                char_sims_when_pred.append(_char_similarity(str(pred), str(g)))
 
     n_total = len(predictions)
 
-    accuracy               = n_correct / n_total if n_total > 0 else None
+    accuracy               = n_correct / n_total       if n_total     > 0 else None
     accuracy_when_pred     = n_predicted_correct / n_predicted if n_predicted > 0 else None
-    avg_char_sim           = sum(char_sims) / len(char_sims) if char_sims else None
+    avg_char_sim           = sum(char_sims)           / len(char_sims)           if char_sims           else None
+    avg_char_sim_when_pred = sum(char_sims_when_pred) / len(char_sims_when_pred) if char_sims_when_pred else None
 
     return {
-        "accuracy":                round(accuracy,           6) if accuracy           is not None else None,
-        "accuracy_when_predicted": round(accuracy_when_pred, 6) if accuracy_when_pred is not None else None,
-        "char_similarity":         round(avg_char_sim,       6) if avg_char_sim       is not None else None,
-        "n_correct":               n_correct,
-        "n_total":                 n_total,
-        "n_predicted":             n_predicted,
-        "n_skipped":               0,
-        "n_na_correct":            n_na_correct,
-        "n_na_gold":               n_na_gold,
-        "n_na_pred":               n_na_pred,
+        "accuracy":                        round(accuracy,               6) if accuracy               is not None else None,
+        "accuracy_when_predicted":         round(accuracy_when_pred,     6) if accuracy_when_pred     is not None else None,
+        "char_similarity":                 round(avg_char_sim,           6) if avg_char_sim           is not None else None,
+        "char_similarity_when_predicted":  round(avg_char_sim_when_pred, 6) if avg_char_sim_when_pred is not None else None,
+        "n_correct":                       n_correct,
+        "n_total":                         n_total,
+        "n_predicted":                     n_predicted,
+        "n_skipped":                       0,
+        "n_na_correct":                    n_na_correct,
+        "n_na_gold":                       n_na_gold,
+        "n_na_pred":                       n_na_pred,
     }
 
 
