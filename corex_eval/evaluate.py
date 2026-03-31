@@ -278,9 +278,10 @@ def _evaluate_atomic(
         .to_dict()
     )
 
-    aligned_pred = []
-    aligned_gold = []
-    missing_preds = []
+    aligned_pred    = []
+    aligned_gold    = []
+    aligned_country = []
+    missing_preds   = []
 
     for _, row in test_df.iterrows():
         case_id  = str(row[CASE_ID_COL])
@@ -292,6 +293,7 @@ def _evaluate_atomic(
 
         aligned_pred.append(pred_index[case_id])
         aligned_gold.append(gold_val)
+        aligned_country.append(str(row.get("country_label", "unknown") or "unknown"))
 
     if missing_preds:
         warnings.warn(
@@ -321,9 +323,36 @@ def _evaluate_atomic(
 
         # birth_place / birth_country: char_similarity is the headline metric
         if variable in CHAR_SIMILARITY_VARIABLES:
-            results["accuracy"]               = results["char_similarity"]
+            results["accuracy"]                = results["char_similarity"]
             results["accuracy_when_predicted"] = results["char_similarity_when_predicted"]
 
+    # --- Per-country breakdown ---
+    from collections import defaultdict
+    country_groups: dict[str, dict] = defaultdict(lambda: {"pred": [], "gold": []})
+    for pred, gold, country in zip(aligned_pred, aligned_gold, aligned_country):
+        country_groups[country]["pred"].append(pred)
+        country_groups[country]["gold"].append(gold)
+
+    per_country: dict[str, dict] = {}
+    for country, data in sorted(country_groups.items()):
+        if dtype == "int":
+            c_res = atomic_mae(data["pred"], data["gold"])
+            per_country[country] = {
+                "accuracy":    c_res.get("accuracy"),
+                "mae":         c_res.get("mae"),
+                "n_evaluated": c_res.get("n_total", 0),
+            }
+        else:
+            from corex_eval.config import CHAR_SIMILARITY_VARIABLES
+            c_res = atomic_accuracy(data["pred"], data["gold"])
+            if variable in CHAR_SIMILARITY_VARIABLES:
+                c_res["accuracy"] = c_res["char_similarity"]
+            per_country[country] = {
+                "accuracy":    c_res.get("accuracy"),
+                "n_evaluated": c_res.get("n_total", 0),
+            }
+
+    results["per_country"] = per_country
     results["n_evaluated"] = results.pop("n_total")
     results["n_skipped"]   = results.pop("n_skipped") + len(missing_preds)
     return results
