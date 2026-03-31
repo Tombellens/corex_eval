@@ -1,0 +1,11 @@
+task: extraction
+variable: atomic
+model: gpt-5.3
+contributor: tom
+description: >
+  Atomic field extraction from raw CV text using GPT-5.3.
+  Extracts birth_year, birth_place, birth_country, sex, edu_start,
+  edu_end, edu_degree in a single structured JSON prompt per CV.
+notes: >
+  Single JSON extraction call per CV. Coded fields (sex, birth_country,
+  edu_degree) use codebook format loaded from gold at runtime.
