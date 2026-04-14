@@ -1,0 +1,11 @@
+task: extraction
+variable: career
+model: llama-3.3-70b
+contributor: tom
+description: >
+  Career history extraction from raw CV text using llama-3.3-70b.
+  Extracts all career spells (start_year, end_year, position) as a JSON
+  array in a single prompt per CV.
+notes: >
+  Single JSON array extraction call per CV. Evaluated with temporal
+  fuzzy matching (tolerance_years=1) on start/end years.
