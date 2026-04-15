@@ -1,0 +1,23 @@
+#!/bin/bash
+# Block notebook commits from the workstation.
+# Only the Mac (where code is edited) should commit notebooks.
+# The workstation only runs them — results go to the register via API.
+
+HOSTNAME=$(hostname)
+
+# Detect workstation by hostname — update if your hostname differs
+if [[ "$HOSTNAME" == *"workstation"* ]] || [[ "$HOSTNAME" == *"tom-desktop"* ]] || [[ "$HOSTNAME" == *"ubuntu"* ]]; then
+    staged_notebooks=$(git diff --cached --name-only | grep '\.ipynb$')
+    if [ -n "$staged_notebooks" ]; then
+        echo ""
+        echo "  ERROR: Notebook commits are blocked on the workstation."
+        echo "  Edit notebooks on the Mac, then git pull here."
+        echo ""
+        echo "  Staged notebooks:"
+        echo "$staged_notebooks" | sed 's/^/    /'
+        echo ""
+        echo "  To unstage: git restore --staged <file>"
+        echo ""
+        exit 1
+    fi
+fi
