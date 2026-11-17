@@ -58,11 +58,20 @@ def test_df(gold_df):
 
 @pytest.fixture(scope="session")
 def train_df(gold_df):
-    """80% training split."""
+    """Full 80% training pool (train + dev)."""
     from corex_eval.split import apply_train_split
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return apply_train_split(gold_df)
+        return apply_train_split(gold_df, include_dev=True)
+
+
+@pytest.fixture(scope="session")
+def dev_df(gold_df):
+    """Dev split, carved out of the 80% training pool."""
+    from corex_eval.split import apply_dev_split
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return apply_dev_split(gold_df)
 
 
 @pytest.fixture(scope="session")

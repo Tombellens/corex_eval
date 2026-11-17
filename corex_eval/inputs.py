@@ -68,9 +68,10 @@ def load_inputs(
     variable: str | None = None,
     gold_path: str | None = None,
     silver_path: str | None = None,
+    split: str = "test",
 ) -> "pd.DataFrame":
     """
-    Load the 20% test set inputs for a given pipeline task.
+    Load the test (or dev) set inputs for a given pipeline task.
 
     Contributors run their model on the returned dataframe and produce
     a predictions dataframe with the same case_id (and spell_index for
@@ -86,10 +87,12 @@ def load_inputs(
                Ignored for "collection".
     gold_path   : Optional path override for the gold CSV.
     silver_path : Optional path override for the silver CSV.
+    split       : "test" (default) or "dev". Use "dev" while tuning prompts
+                  or design choices; evaluate with the same split.
 
     Returns
     -------
-    DataFrame containing the test set input columns for the given task.
+    DataFrame containing the input columns for the given task.
 
         collection → [case_id, name_first, name_last, job_title, country_label]
         extraction → [case_id, cv_local]
@@ -104,7 +107,8 @@ def load_inputs(
     """
     _validate_task(task)
     gold_df = _load_clean_gold(gold_path)
-    test_df = _apply_test_split(gold_df)
+    from corex_eval.split import apply_eval_split
+    test_df = apply_eval_split(gold_df, split)
 
     if task == "collection":
         return _collection_inputs(test_df)
@@ -126,9 +130,14 @@ def load_training_data(
     variable: str | None = None,
     gold_path: str | None = None,
     silver_path: str | None = None,
+    include_dev: bool = False,
 ) -> "pd.DataFrame":
     """
-    Load the 80% training set with the requested feature columns.
+    Load the training set with the requested feature columns.
+
+    By default the dev cases are excluded, so dev evaluation is never
+    contaminated (e.g. via fine-tuning or RAG retrieval). Pass
+    include_dev=True for final test-set runs to train on the full 80%.
 
     Contributors use this to build training datasets for fine-tuning
     or to construct few-shot examples for prompting.
@@ -164,7 +173,8 @@ def load_training_data(
     """
     _validate_task(task)
     gold_df  = _load_clean_gold(gold_path)
-    train_df = _apply_train_split(gold_df)
+    from corex_eval.split import apply_train_split
+    train_df = apply_train_split(gold_df, include_dev=include_dev)
 
     if task == "annotation":
         _validate_annotation_variable(variable)
@@ -296,16 +306,6 @@ def _load_clean_gold(path: str | None) -> "pd.DataFrame":
 def _load_clean_silver(path: str | None) -> "pd.DataFrame":
     from corex_eval.silver import load_silver
     return load_silver(path)
-
-
-def _apply_test_split(df: "pd.DataFrame") -> "pd.DataFrame":
-    from corex_eval.split import apply_test_split
-    return apply_test_split(df)
-
-
-def _apply_train_split(df: "pd.DataFrame") -> "pd.DataFrame":
-    from corex_eval.split import apply_train_split
-    return apply_train_split(df)
 
 
 # ---------------------------------------------------------------------------

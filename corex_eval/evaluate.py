@@ -49,6 +49,7 @@ from corex_eval.config import (
     COUNTRY_COL,
     EXTRACTION_VARIABLES,
     SPELL_INDEX_COL,
+    VALID_EVAL_SPLITS,
     career_position_to_sector,
     uni_subject_to_prefix,
 )
@@ -75,9 +76,11 @@ def evaluate(
     embedding_model: str = "all-MiniLM-L6-v2",
     tolerance_years: int | None = None,
     granularity: str = "fine",
+    split: str = "test",
+    n_bootstrap: int = 1000,
 ) -> dict:
     """
-    Evaluate model predictions against the gold standard test set.
+    Evaluate model predictions against the gold standard test (or dev) set.
 
     Parameters
     ----------
@@ -132,6 +135,13 @@ def evaluate(
                               measuring broad-sector accuracy when fine-grained
                               codes are too specific.
 
+    split           : "test" (default) or "dev". Dev results cannot be
+                      submitted to the register.
+
+    n_bootstrap     : Replicates for 95% percentile confidence intervals,
+                      resampling persons (case_id). Results go in
+                      results["ci"] as {metric: [lower, upper]}. 0 disables.
+
     Returns
     -------
     Results dict with structure depending on task:
@@ -155,13 +165,17 @@ def evaluate(
             "experiment_path is required when submit=True. "
             "Pass the path to your experiment config.yaml."
         )
+    if split not in VALID_EVAL_SPLITS:
+        raise ValueError(f"split must be one of {VALID_EVAL_SPLITS}, got '{split}'.")
+    if submit and split != "test":
+        raise ValueError("Only test-split results can be submitted (split='test').")
 
-    # --- Load gold and apply test split ---
+    # --- Load gold and apply evaluation split ---
     from corex_eval.gold import load_gold
-    from corex_eval.split import apply_test_split
+    from corex_eval.split import apply_eval_split
 
     gold_df  = load_gold(gold_path)
-    test_df  = apply_test_split(gold_df)
+    test_df  = apply_eval_split(gold_df, split)
 
     # --- Route to task-specific evaluator ---
     if task == "collection":
@@ -169,7 +183,7 @@ def evaluate(
 
     elif task == "extraction":
         results = _evaluate_extraction(
-            predictions_df, test_df, variable, tolerance_years
+            predictions_df, test_df, variable, tolerance_years, n_bootstrap
         )
 
     elif task == "annotation":
@@ -180,12 +194,13 @@ def evaluate(
             predictions_df, test_df, silver_df,
             variable, gold_case_ids,
             semantic_similarity, embedding_model,
-            granularity,
+            granularity, n_bootstrap,
         )
 
     # --- Add task metadata ---
     results["task"]     = task
     results["variable"] = variable
+    results["split"]    = split
 
     # --- Optionally submit ---
     if submit:
@@ -245,20 +260,24 @@ def _evaluate_extraction(
     test_df: "pd.DataFrame",
     variable: str,
     tolerance_years: int | None,
+    n_bootstrap: int,
 ) -> dict:
     """
     Route to atomic or composite extraction metrics depending on variable.
     """
     if variable in ATOMIC_VARIABLES:
-        return _evaluate_atomic(predictions_df, test_df, variable)
+        return _evaluate_atomic(predictions_df, test_df, variable, n_bootstrap)
     else:
-        return _evaluate_composite(predictions_df, test_df, variable, tolerance_years)
+        return _evaluate_composite(
+            predictions_df, test_df, variable, tolerance_years, n_bootstrap
+        )
 
 
 def _evaluate_atomic(
     predictions_df: "pd.DataFrame",
     test_df: "pd.DataFrame",
     variable: str,
+    n_bootstrap: int = 0,
 ) -> dict:
     """
     Evaluate an atomic extraction variable (single value per case).
@@ -281,6 +300,7 @@ def _evaluate_atomic(
     aligned_pred    = []
     aligned_gold    = []
     aligned_country = []
+    aligned_ids     = []
     missing_preds   = []
 
     for _, row in test_df.iterrows():
@@ -291,6 +311,7 @@ def _evaluate_atomic(
             missing_preds.append(case_id)
             continue
 
+        aligned_ids.append(case_id)
         aligned_pred.append(pred_index[case_id])
         aligned_gold.append(gold_val)
         aligned_country.append(str(row.get("country_label", "unknown") or "unknown"))
@@ -305,7 +326,14 @@ def _evaluate_atomic(
     if dtype == "int":
         results = atomic_mae(aligned_pred, aligned_gold)
     else:
-        from corex_eval.config import CHAR_SIMILARITY_VARIABLES, DEGREE_PREFIX_VARIABLES
+        from corex_eval.config import (
+            CHAR_SIMILARITY_VARIABLES, COUNTRY_VARIABLES, DEGREE_PREFIX_VARIABLES,
+        )
+
+        if variable in COUNTRY_VARIABLES:
+            code_names = _country_code_names(aligned_gold)
+            aligned_pred = [_country_key(v, code_names) for v in aligned_pred]
+            aligned_gold = [_country_key(v, code_names) for v in aligned_gold]
 
         # edu_degree: compare only the leading digit(s) to avoid format
         # mismatches like "6 = Bachelor" vs "6. Bachelor" vs "6"
@@ -355,7 +383,33 @@ def _evaluate_atomic(
     results["per_country"] = per_country
     results["n_evaluated"] = results.pop("n_total")
     results["n_skipped"]   = results.pop("n_skipped") + len(missing_preds)
+    results["ci"] = _atomic_ci(
+        aligned_ids, aligned_pred, aligned_gold, variable, dtype, n_bootstrap
+    )
     return results
+
+
+def _atomic_ci(ids, preds, golds, variable, dtype, n_bootstrap) -> dict:
+    """Per-item scores computed once, then bootstrapped as means by person."""
+    from corex_eval.config import CHAR_SIMILARITY_VARIABLES
+    from corex_eval.metrics.bootstrap import cluster_bootstrap_ci, mean_of
+    from corex_eval.metrics.extraction import atomic_accuracy, atomic_mae
+
+    if n_bootstrap <= 0 or not ids:
+        return {}
+    if dtype == "int":
+        items = [atomic_mae([p], [g]) for p, g in zip(preds, golds)]
+        stats = {
+            "accuracy": mean_of([i["accuracy"] for i in items]),
+            "mae":      mean_of([i["mae"] for i in items]),
+        }
+    else:
+        items = [atomic_accuracy([p], [g]) for p, g in zip(preds, golds)]
+        key = "char_similarity" if variable in CHAR_SIMILARITY_VARIABLES else "accuracy"
+        stats = {"accuracy": mean_of([i[key] for i in items])}
+    return cluster_bootstrap_ci(
+        ids, lambda idx: {name: f(idx) for name, f in stats.items()}, n_boot=n_bootstrap
+    )
 
 
 def _evaluate_composite(
@@ -363,6 +417,7 @@ def _evaluate_composite(
     test_df: "pd.DataFrame",
     variable: str,
     tolerance_years: int | None,
+    n_bootstrap: int = 0,
 ) -> dict:
     """
     Evaluate composite extraction (career history).
@@ -430,6 +485,18 @@ def _evaluate_composite(
     results["n_evaluated"] = results.pop("n_cases")
     results["n_skipped"]   = results.pop("n_skipped") + len(missing_preds)
     results["tolerance_years"] = tol
+
+    from corex_eval.metrics.bootstrap import cluster_bootstrap_ci, mean_of
+    ids = list(results["per_case"])
+    cols = {
+        "precision": "precision", "recall": "recall", "f1": "f1",
+        "strict_precision": "strict_precision", "strict_recall": "strict_recall",
+        "strict_f1": "strict_f1",
+    }
+    stats = {name: mean_of([results["per_case"][c][k] for c in ids]) for name, k in cols.items()}
+    results["ci"] = cluster_bootstrap_ci(
+        ids, lambda idx: {name: f(idx) for name, f in stats.items()}, n_boot=n_bootstrap
+    )
     return results
 
 
@@ -442,6 +509,7 @@ def _evaluate_annotation(
     semantic_similarity: bool,
     embedding_model: str,
     granularity: str = "fine",
+    n_bootstrap: int = 0,
 ) -> dict:
     """
     Align predictions to gold annotation codes and compute classification metrics.
@@ -470,10 +538,14 @@ def _evaluate_annotation(
 
     # Build gold dict
     gold_dict: dict = {}
+    known_codes: set[str] = set()
     if has_spells:
         # Gold code is stored inline in the silver rows.
         # Alignment key: (case_id, spell_index) → gold_code.
         silver_inputs = get_silver_inputs(silver_df, variable, gold_case_ids)
+        known_codes = {
+            c for c in (_code_prefix(v) for v in silver_inputs[gold_col].astype(str)) if c
+        }
         for _, row in silver_inputs.iterrows():
             if str(row[CASE_ID_COL]) not in test_case_ids:
                 continue
@@ -493,10 +565,11 @@ def _evaluate_annotation(
     }
 
     # Align predictions to gold
-    aligned_pred    = []
-    aligned_gold    = []
-    aligned_country = []
-    missing_preds   = []
+    aligned_pred     = []
+    aligned_gold     = []
+    aligned_country  = []
+    aligned_case_ids = []
+    missing_preds    = []
 
     for _, row in predictions_df.iterrows():
         case_id = str(row[CASE_ID_COL])
@@ -522,6 +595,7 @@ def _evaluate_annotation(
         aligned_pred.append(pred_code)
         aligned_gold.append(gold_code)
         aligned_country.append(country_map.get(case_id, "unknown"))
+        aligned_case_ids.append(case_id)
 
     if missing_preds:
         warnings.warn(
@@ -530,6 +604,10 @@ def _evaluate_annotation(
             f"{missing_preds[:10]}"
             f"{'...' if len(missing_preds) > 10 else ''}"
         )
+
+    output_checks = _annotation_output_checks(
+        aligned_pred, aligned_gold, known_codes, granularity, variable
+    )
 
     # Collapse to broad sector if requested
     if granularity == "broad":
@@ -553,6 +631,16 @@ def _evaluate_annotation(
     results["n_evaluated"] = results.pop("n_total")
     results["n_skipped"]   = len(missing_preds)
     results["granularity"] = granularity
+    results.update(output_checks)
+
+    from corex_eval.metrics.bootstrap import classification_stats, cluster_bootstrap_ci
+    results["ci"] = (
+        cluster_bootstrap_ci(
+            aligned_case_ids, classification_stats(aligned_gold, aligned_pred),
+            n_boot=n_bootstrap,
+        )
+        if aligned_case_ids else {}
+    )
 
     # Per-country breakdown
     from collections import defaultdict
@@ -602,6 +690,10 @@ def _print_summary(results: dict, task: str, variable: str | None) -> None:
             print(f"  Precision (macro): {m.get('precision', '?'):.4f}")
             print(f"  Recall    (macro): {m.get('recall',    '?'):.4f}")
             print(f"  F1        (macro): {m.get('f1',        '?'):.4f}")
+            s = results.get("strict")
+            if s:
+                print(f"  Strict P / R / F1: {s['precision']:.4f} / "
+                      f"{s['recall']:.4f} / {s['f1']:.4f}")
         else:
             print(f"  Accuracy : {results.get('accuracy', '?')}")
 
@@ -611,6 +703,11 @@ def _print_summary(results: dict, task: str, variable: str | None) -> None:
         print(f"  Weighted F1  : {results.get('weighted_f1', '?')}")
         if results.get("semantic_similarity") is not None:
             print(f"  Semantic sim : {results['semantic_similarity']:.4f}")
+        if results.get("invalid_rate") is not None:
+            print(f"  Invalid rate : {results['invalid_rate']}  (n={results['n_invalid']})")
+        if results.get("n_format_mismatch"):
+            print(f"  Right code, wrong format: {results['n_format_mismatch']} "
+                  f"(scored as wrong)")
         per_country = results.get("per_country", {})
         if per_country:
             print(f"\n  Per-country accuracy:")
@@ -623,6 +720,87 @@ def _print_summary(results: dict, task: str, variable: str | None) -> None:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _country_code_names(gold_values) -> dict[str, str]:
+    """Map gold country codes to names, e.g. {"17": "Belgium"} from "17 = Belgium"."""
+    names = {}
+    for v in gold_values:
+        if v is not None and "=" in str(v):
+            code, name = str(v).split("=", 1)
+            if code.strip().isdigit():
+                names[code.strip()] = name.strip()
+    return names
+
+
+def _country_key(value, code_names: dict[str, str]):
+    """
+    Canonical country name for comparison. NA values are returned unchanged so
+    the NA handling of atomic_accuracy still applies.
+    """
+    import re
+    import unicodedata
+    from corex_eval.config import COUNTRY_ALIASES
+    from corex_eval.metrics.extraction import _is_empty
+
+    if _is_empty(value):
+        return value
+    s = str(value).strip()
+    if "=" in s:
+        s = s.split("=", 1)[1]
+    elif s.isdigit():
+        s = code_names.get(s, s)
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    s = re.sub(r"[^\w\s&]", " ", s.lower())
+    s = re.sub(r"\s+", " ", s).strip()
+    s = COUNTRY_ALIASES.get(s, s)
+    if s.startswith("the "):
+        s = COUNTRY_ALIASES.get(s[4:], s[4:])
+    return s
+
+
+def _code_prefix(value) -> str | None:
+    """Leading numeric code of a label ("105 = Minister" → "105"), or None."""
+    import re
+    m = re.match(r"^\s*(\d+)", str(value))
+    return m.group(1) if m else None
+
+
+def _annotation_output_checks(
+    preds: list[str],
+    golds: list[str],
+    known_codes: set[str],
+    granularity: str,
+    variable: str,
+) -> dict:
+    """
+    Count predictions that are not a usable code, and (for fine career codes,
+    which are compared as full strings) right codes in the wrong format.
+
+    Without a codebook file in the repo, "valid" means the numeric code occurs
+    among the gold codes for this variable.
+    """
+    if granularity == "broad":
+        valid = {c[0] for c in known_codes}
+        def code(v):
+            p = _code_prefix(v)
+            return p[0] if p else None
+    else:
+        valid = known_codes
+        code = _code_prefix
+
+    n = len(preds)
+    n_invalid = sum(1 for p in preds if code(p) not in valid) if valid else 0
+    checks = {
+        "n_invalid":    n_invalid,
+        "invalid_rate": round(n_invalid / n, 6) if n and valid else None,
+    }
+    if variable == "career_position" and granularity == "fine":
+        checks["n_format_mismatch"] = sum(
+            1 for p, g in zip(preds, golds)
+            if p != g and _code_prefix(p) is not None and _code_prefix(p) == _code_prefix(g)
+        )
+    return checks
+
 
 def _parse_urls(raw: str) -> set[str]:
     """Parse a pipe-separated URL string into a set of stripped URL strings."""

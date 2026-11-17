@@ -259,6 +259,12 @@ def composite_metrics(
     tolerance_years : Maximum year difference still counted as a match.
                       Defaults to TEMPORAL_TOLERANCE_YEARS from config.py.
 
+    Two variants are reported:
+      - "macro" (lenient, as in the PolMeth paper): first-fit greedy matching,
+        a missing year on either side is compatible with any year.
+      - "strict": maximum (optimal) matching, and a missing year is only
+        compatible with another missing year.
+
     Returns
     -------
     {
@@ -267,6 +273,9 @@ def composite_metrics(
             "recall":    float,
             "f1":        float,
         },
+        "strict": {"precision": float, "recall": float, "f1": float},
+        "spell_counts": {"mean_predicted": float, "mean_gold": float,
+                         "mean_matched": float, "mean_matched_strict": float},
         "per_case": {
             "<case_id>": {
                 "precision":       float,
@@ -293,28 +302,38 @@ def composite_metrics(
             continue
 
         p, r, f, n_matched = _match_spells(pred_spells, gold_spells, tolerance_years)
+        n_strict = _max_matching(pred_spells, gold_spells, tolerance_years)
+        sp, sr, sf = _prf(n_strict, len(pred_spells), len(gold_spells))
 
         per_case[str(case_id)] = {
-            "precision":   round(p, 6),
-            "recall":      round(r, 6),
-            "f1":          round(f, 6),
-            "n_predicted": len(pred_spells),
-            "n_gold":      len(gold_spells),
-            "n_matched":   n_matched,
+            "precision":        round(p, 6),
+            "recall":           round(r, 6),
+            "f1":               round(f, 6),
+            "n_predicted":      len(pred_spells),
+            "n_gold":           len(gold_spells),
+            "n_matched":        n_matched,
+            "strict_precision": round(sp, 6),
+            "strict_recall":    round(sr, 6),
+            "strict_f1":        round(sf, 6),
+            "n_matched_strict": n_strict,
         }
 
     n = len(per_case)
-    if n == 0:
-        macro = {"precision": 0.0, "recall": 0.0, "f1": 0.0}
-    else:
-        macro = {
-            "precision": round(sum(v["precision"] for v in per_case.values()) / n, 6),
-            "recall":    round(sum(v["recall"]    for v in per_case.values()) / n, 6),
-            "f1":        round(sum(v["f1"]        for v in per_case.values()) / n, 6),
-        }
+
+    def _mean(key: str) -> float:
+        return round(sum(v[key] for v in per_case.values()) / n, 6) if n else 0.0
 
     return {
-        "macro":     macro,
+        "macro":  {"precision": _mean("precision"), "recall": _mean("recall"),
+                   "f1": _mean("f1")},
+        "strict": {"precision": _mean("strict_precision"),
+                   "recall": _mean("strict_recall"), "f1": _mean("strict_f1")},
+        "spell_counts": {
+            "mean_predicted":      _mean("n_predicted"),
+            "mean_gold":           _mean("n_gold"),
+            "mean_matched":        _mean("n_matched"),
+            "mean_matched_strict": _mean("n_matched_strict"),
+        },
         "per_case":  per_case,
         "n_cases":   n,
         "n_skipped": len(skipped),
@@ -365,14 +384,54 @@ def _match_spells(
             matched_gold.add(best_idx)
             n_matched += 1
 
-    precision = n_matched / len(predicted)
-    recall    = n_matched / len(gold)
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    precision, recall, f1 = _prf(n_matched, len(predicted), len(gold))
     return precision, recall, f1, n_matched
+
+
+def _prf(n_matched: int, n_pred: int, n_gold: int) -> tuple[float, float, float]:
+    if n_pred == 0 and n_gold == 0:
+        return 1.0, 1.0, 1.0
+    if n_pred == 0 or n_gold == 0:
+        return 0.0, 0.0, 0.0
+    precision = n_matched / n_pred
+    recall    = n_matched / n_gold
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    return precision, recall, f1
+
+
+def _max_matching(
+    predicted: list[CareerSpell],
+    gold: list[CareerSpell],
+    tolerance: int,
+) -> int:
+    """Size of the maximum one-to-one matching under strict year compatibility."""
+    if not predicted or not gold:
+        return 0
+    import numpy as np
+    from scipy.optimize import linear_sum_assignment
+
+    compat = np.array(
+        [[_spells_match_strict(p, g, tolerance) for g in gold] for p in predicted],
+        dtype=float,
+    )
+    rows, cols = linear_sum_assignment(compat, maximize=True)
+    return int(compat[rows, cols].sum())
+
+
+def _spells_match_strict(a: CareerSpell, b: CareerSpell, tolerance: int) -> bool:
+    """Like _spells_match, but a missing year only matches another missing year."""
+    if a.start_year is None and a.end_year is None:
+        return False
+    return (
+        _years_compatible_strict(a.start_year, b.start_year, tolerance)
+        and _years_compatible_strict(a.end_year, b.end_year, tolerance)
+    )
+
+
+def _years_compatible_strict(a: int | None, b: int | None, tolerance: int) -> bool:
+    if a is None or b is None:
+        return a is None and b is None
+    return abs(a - b) <= tolerance
 
 
 def _spells_match(

@@ -92,3 +92,20 @@ class TestGetIds:
     def test_test_and_train_ids_are_disjoint(self, gold_df):
         from corex_eval.split import get_test_ids, get_train_ids
         assert len(get_test_ids(gold_df) & get_train_ids(gold_df)) == 0
+
+
+class TestDevSplit:
+
+    def test_dev_is_inside_train_pool(self, dev_df, train_df):
+        assert set(dev_df["case_id"]) <= set(train_df["case_id"])
+
+    def test_dev_disjoint_from_test(self, dev_df, test_df):
+        assert not set(dev_df["case_id"]) & set(test_df["case_id"])
+
+    def test_dev_size(self, dev_df, train_df):
+        ratio = len(dev_df) / len(train_df)
+        assert abs(ratio - 0.15) < 0.02, f"Dev ratio was {ratio:.3f}"
+
+    def test_default_train_excludes_dev(self, gold_df, dev_df):
+        from corex_eval.split import get_train_ids
+        assert not get_train_ids(gold_df) & set(dev_df["case_id"].astype(str))

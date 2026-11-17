@@ -49,6 +49,13 @@ SPLIT_SEED      = 42      # never change — guarantees everyone uses the same t
 SPLIT_TEST_SIZE = 0.20
 STRATIFY_COL    = "country_label"   # stratify split by country
 
+# Dev set carved out of the training pool (fraction of the 80% train split),
+# so prompt and design choices are tuned without touching the test set.
+DEV_SEED        = 42
+DEV_SIZE        = 0.15
+
+VALID_EVAL_SPLITS = ("test", "dev")
+
 
 # ---------------------------------------------------------------------------
 # Core identifiers
@@ -120,7 +127,60 @@ EXTRACTION_VARIABLES = set(ATOMIC_VARIABLES) | set(COMPOSITE_VARIABLES)
 
 # Variables where char_similarity replaces exact-match as the primary accuracy.
 # Free-text place names are too variable across sources for rigid exact match.
-CHAR_SIMILARITY_VARIABLES: set[str] = {"birth_place", "birth_country"}
+CHAR_SIMILARITY_VARIABLES: set[str] = {"birth_place"}
+
+# Variables normalised to a canonical country name and scored by exact match.
+# Character similarity is unsuitable here ("Austria" vs "Australia" ≈ 0.88).
+COUNTRY_VARIABLES: set[str] = {"birth_country"}
+
+# Spelling variants → canonical name, applied to both gold and predictions.
+# Former states (Yugoslavia, USSR, Czechoslovakia) are intentionally not
+# merged into successor states: that is a coding disagreement, not spelling.
+COUNTRY_ALIASES: dict[str, str] = {
+    "uk": "united kingdom",
+    "great britain": "united kingdom",
+    "britain": "united kingdom",
+    "united kingdom of great britain and northern ireland": "united kingdom",
+    "usa": "united states",
+    "us": "united states",
+    "united states of america": "united states",
+    "czechia": "czech republic",
+    "turkiye": "turkey",
+    "holland": "netherlands",
+    "the netherlands": "netherlands",
+    "macedonia": "north macedonia",
+    "republic of north macedonia": "north macedonia",
+    "bosnia": "bosnia and herzegovina",
+    "bosnia herzegovina": "bosnia and herzegovina",
+    "bosnia & herzegovina": "bosnia and herzegovina",
+    "russian federation": "russia",
+    "republic of korea": "south korea",
+    "korea": "south korea",
+    "republic of ireland": "ireland",
+    "slovak republic": "slovakia",
+    "republic of moldova": "moldova",
+    "deutschland": "germany",
+    "osterreich": "austria",
+    "belgique": "belgium",
+    "belgie": "belgium",
+    "espana": "spain",
+    "italia": "italy",
+    "polska": "poland",
+    "magyarorszag": "hungary",
+    "hrvatska": "croatia",
+    "srbija": "serbia",
+    "shqiperia": "albania",
+    "eesti": "estonia",
+    "lietuva": "lithuania",
+    "latvija": "latvia",
+    "suomi": "finland",
+    "sverige": "sweden",
+    "danmark": "denmark",
+    "norge": "norway",
+    "nippon": "japan",
+    "hellas": "greece",
+    "ellada": "greece",
+}
 
 # Variables where only the leading digit(s) of the code are compared,
 # avoiding format mismatches like "6 = Bachelor" vs "6. Bachelor" vs "6".

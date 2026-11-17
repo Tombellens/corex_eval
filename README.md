@@ -158,6 +158,22 @@ train_df["career_position"] = train_df["career_position"].map(career_position_to
 # "105 = Minister with portfolio" → "1"
 ```
 
+### Dev split and confidence intervals
+
+Tune prompts and design choices on the dev split, never on test:
+
+```python
+inputs  = load_inputs(task="annotation", variable="career_position", split="dev")
+results = evaluate(predictions_df, task="annotation", variable="career_position", split="dev")
+```
+
+The dev set (15% of the training pool) is excluded from `load_training_data()`
+by default; pass `include_dev=True` for final test-set runs. Dev results
+cannot be submitted.
+
+Every evaluation includes 95% bootstrap intervals in `results["ci"]`,
+resampled by person (`n_bootstrap=1000` by default, `0` disables).
+
 ### Load training data
 
 ```python

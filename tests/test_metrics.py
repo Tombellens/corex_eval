@@ -286,6 +286,47 @@ class TestCompositeMetrics:
         gold  = {"p1": [self._spell("p1", 2010, 2015)]}
         r = composite_metrics(preds, gold)
         assert r["macro"]["f1"] == pytest.approx(0.0)
+        assert r["strict"]["f1"] == pytest.approx(0.0)
+
+    def test_strict_missing_year_only_matches_missing(self):
+        from corex_eval.metrics.extraction import composite_metrics
+        preds = {"p1": [self._spell("p1", 2010, None)]}
+        gold  = {"p1": [self._spell("p1", 2010, 2015)]}
+        r = composite_metrics(preds, gold)
+        assert r["macro"]["f1"]  == pytest.approx(1.0)
+        assert r["strict"]["f1"] == pytest.approx(0.0)
+        both_missing = composite_metrics(
+            {"p1": [self._spell("p1", 2010, None)]},
+            {"p1": [self._spell("p1", 2010, None)]},
+        )
+        assert both_missing["strict"]["f1"] == pytest.approx(1.0)
+
+    def test_strict_uses_optimal_matching(self):
+        from corex_eval.metrics.extraction import composite_metrics
+        # Pred A fits both gold spells, pred B fits only the first one.
+        # First-fit gives A the first gold spell and leaves B unmatched;
+        # optimal matching pairs A with the second and B with the first.
+        preds = {"p1": [self._spell("p1", 2010, 2015), self._spell("p1", 2011, 2014)]}
+        gold  = {"p1": [self._spell("p1", 2011, 2015), self._spell("p1", 2009, 2016)]}
+        r = composite_metrics(preds, gold, tolerance_years=1)
+        assert r["per_case"]["p1"]["n_matched"] == 1
+        assert r["per_case"]["p1"]["n_matched_strict"] == 2
+
+    def test_lenient_numbers_unchanged(self):
+        from corex_eval.metrics.extraction import composite_metrics
+        preds = {"p1": [self._spell("p1", 2010, 2015), self._spell("p1", 2016, 2020)]}
+        gold  = {"p1": [self._spell("p1", 2010, 2015)]}
+        r = composite_metrics(preds, gold)
+        assert r["macro"] == {"precision": 0.5, "recall": 1.0, "f1": pytest.approx(0.666667)}
+
+    def test_spell_counts_reported(self):
+        from corex_eval.metrics.extraction import composite_metrics
+        preds = {"p1": [self._spell("p1", 2010, 2015), self._spell("p1", 2016, 2020)],
+                 "p2": []}
+        gold  = {"p1": [self._spell("p1", 2010, 2015)], "p2": [self._spell("p2", 2000, 2001)]}
+        c = composite_metrics(preds, gold)["spell_counts"]
+        assert c["mean_predicted"] == 1.0 and c["mean_gold"] == 1.0
+        assert c["mean_matched"] == 0.5
 
 
 # ---------------------------------------------------------------------------
